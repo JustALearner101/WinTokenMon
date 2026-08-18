@@ -1,0 +1,75 @@
+[project]
+name = "wintokenmon"
+version = "0.1.0"
+description = "Universal local AI token usage monitor & desktop pet companion for Windows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "WinTokenMon Contributors" }
+]
+keywords = [
+    "pokemon",
+    "desktop-pet",
+    "windows",
+    "ai-tokens",
+    "claude-code",
+    "cursor-ide",
+    "antigravity",
+    "gamification",
+]
+dependencies = [
+    "customtkinter>=6.0.0",
+    "pystray>=0.19.5",
+    "Pillow>=10.0.0",
+    "darkdetect>=0.8.0",
+    "pygame-ce>=2.5.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/JustALearner101/WinTokenMon"
+Repository = "https://github.com/JustALearner101/WinTokenMon.git"
+Issues = "https://github.com/JustALearner101/WinTokenMon/issues"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4.0",
+    "pytest>=8.0.0",
+    "pyinstaller>=6.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined variables)
+    "I",   # isort (import sorting)
+    "B",   # flake8-bugbear (common bug prevention)
+    "UP",  # pyupgrade (modern Python idioms)
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+    "B008", # do not perform function calls in argument defaults
+    "B904", # raise ... from err (forgiving on simple re-raises)
+    "B905", # zip() without an explicit strict= parameter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]
+"main.py" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

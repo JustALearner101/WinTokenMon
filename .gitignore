@@ -1,0 +1,128 @@
+# ==========================================
+# Byte-compiled / optimized / DLL files
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# ==========================================
+# C extensions & Build Artifacts
+# ==========================================
+build/
+dist/
+Output/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+
+# ==========================================
+# Virtual Environments & Package Managers
+# ==========================================
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.uv/
+
+# ==========================================
+# Cloned Upstream Reference (Preserve README)
+# ==========================================
+reference/PokeTokenBar/
+reference/*
+!reference/README.md
+
+# ==========================================
+# Environment Variables, Secrets & Keys
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.env
+*.pem
+*.key
+*.cert
+*.pfx
+
+# ==========================================
+# Local State, Cache & Sensitive Token DBs
+# ==========================================
+debug.log
+*.log
+*.tmp
+*.temp
+*.bak
+*.dmp
+window_pos.json
+state.json
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.vscdb
+*.jsonl
+
+# ==========================================
+# Testing, Coverage & Linters
+# ==========================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.ruff_cache/
+.mypy_cache/
+
+# ==========================================
+# OS Generated Files (Windows, macOS, Linux)
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+DumpStack.log.tmp
+
+# ==========================================
+# IDE & Editor Settings
+# ==========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.cursor/
+.windsurf/
+.commandcode/
+.claude/
+
+# ==========================================
+# OTHERS & TEMPORARY EXCLUSIONS
+# ==========================================
+/pic
+CONTRIBUTING.md
+docs/**/CONTRIBUTING*.md
+*CONTRIBUTING*
