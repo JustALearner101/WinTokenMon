@@ -115,5 +115,5 @@ Kerangka pencapaian yang memberikan hadiah bagi developer berdasarkan kebiasaan 
 ## 🤝 Berkontribusi pada Roadmap
 
 Tertarik mengimplementasikan salah satu fitur di atas?
-- Baca [Panduan Kontribusi](CONTRIBUTING.id.md) kami.
+- Baca [Panduan Operasional & HOWTO](HOWTO.id.md) kami.
 - Pilih salah satu fitur dari milestone di atas dan buka GitHub Issue atau Pull Request!

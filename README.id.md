@@ -142,7 +142,7 @@ Flags yang tersedia:
 - 🗺️ [**Roadmap & Rencana Masa Depan**](docs/id/FUTURE-WORKS.md): Fitur achievements, minigame memberi makan, dan HUD compact.
 - ⚠️ [**Batasan Teknis & FAQ**](docs/id/KNOWN-LIMITATIONS.id.md): Penjelasan transparansi colorkey, multi-monitor, dan solusinya.
 - 🛡️ [**Kebijakan Keamanan & Privasi**](docs/id/SECURITY.id.md): Jaminan privasi 100% lokal.
-- 🤝 [**Panduan Kontribusi**](docs/id/CONTRIBUTING.id.md): Cara menambahkan scanner tool AI baru.
+<!-- - 🤝 [**Panduan Kontribusi**](docs/id/CONTRIBUTING.id.md): Cara menambahkan scanner tool AI baru. -->
 
 ---
 

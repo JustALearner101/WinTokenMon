@@ -53,5 +53,5 @@ Apakah Anda menemukan solusi yang lebih baik, atau berpengalaman dengan Windows 
    - Menambahkan scanner untuk tools AI baru (Aider, Windsurf/Cascade, Roo Code, Cline).
 
 ### Cara Berkontribusi
-- Baca [Panduan Kontribusi](CONTRIBUTING.id.md) kami.
+- Baca [Panduan Operasional & HOWTO](HOWTO.id.md) kami.
 - Buka GitHub Issue untuk mendiskusikan usulan arsitektur Anda, atau langsung ajukan Pull Request!

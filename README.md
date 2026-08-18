@@ -141,7 +141,7 @@ Available flags:
 - 🗺️ [**Roadmap & Future Works**](docs/FUTURE-WORKS.md): Upcoming achievements, desktop minigames, compact HUD, and AI scanners.
 - ⚠️ [**Known Limitations & FAQ**](docs/KNOWN-LIMITATIONS.md): Windows platform quirks, colorkey transparency, and workarounds.
 - 🛡️ [**Security & Privacy Policy**](SECURITY.md): Privacy guarantees and local file inspection rules.
-- 🤝 [**Contributing Guide**](CONTRIBUTING.md): How to add support for new AI coding tools.
+<!-- - 🤝 [**Contributing Guide**](CONTRIBUTING.md): How to add support for new AI coding tools. -->
 
 ---
 

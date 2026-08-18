@@ -73,5 +73,5 @@ Have you encountered a clever workaround, or do you have experience with Windows
    - Adding support for emerging AI tools (Aider, Windsurf/Cascade, Roo Code, Cline, OpenCode).
 
 ### How to Contribute
-- Review our [Contributing Guide](../CONTRIBUTING.md) for local environment setup and testing instructions.
+- Review our [Developer Playbook & HOWTO](HOWTO.md) for local environment setup and testing instructions.
 - Open a GitHub Issue to discuss your architectural proposal, or submit a Pull Request directly!

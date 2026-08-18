@@ -152,5 +152,5 @@ For power users who prefer minimal screen clutter while keeping an eye on live t
 ## 🤝 Contributing to Roadmap Items
 
 Interested in building one of these features?
-- Check out our [Contributing Guide](../CONTRIBUTING.md) for local setup and coding guidelines.
+- Check out our [Developer Playbook & HOWTO](HOWTO.md) for local setup and coding guidelines.
 - Pick any item from the milestones above and open a GitHub Issue or Pull Request!
