@@ -7,7 +7,7 @@
 <br/>
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-v0.1.0--beta-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v0.2.0--preview-blue?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Privacy](https://img.shields.io/badge/Privacy-100%25%20Local-2EA44F?style=for-the-badge&logo=shield&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)

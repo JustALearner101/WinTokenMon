@@ -44,6 +44,7 @@ class CeremonyEvent:
     GRADUATE = "graduate"
     CANDY_XP = "candy_xp"
     MINT_CHANGE = "mint_change"
+    FRIENDSHIP_UP = "friendship_up"
 
     event_type: str
     species_id: int = 0
@@ -51,6 +52,8 @@ class CeremonyEvent:
     is_shiny: bool = False
     xp_amount: int = 0
     new_nature: str = ""
+    friendship_amount: int = 0
+    item_kind: str = ""
 
 
 class CompanionStore:
@@ -64,6 +67,7 @@ class CompanionStore:
         self.catch_log: list[dict] = []
         self.inventory: dict[str, int] = {
             ItemKind.RARE_CANDY.value: 1,
+            ItemKind.ORAN_BERRY.value: 0,
             ItemKind.MINT.value: 0,
             ItemKind.SHINY_CHARM.value: 0,
         }
@@ -82,6 +86,7 @@ class CompanionStore:
         self.taskbar_snap: bool = False
         self.sound_enabled: bool = True
         self.roaming_enabled: bool = True  # Autonomous wandering on desktop
+        self.spawn_intro_enabled: bool = True  # Pokéball entrance intro animation on startup
 
         # 7-day token history: {"YYYY-MM-DD": tokens}
         self.daily_history: dict[str, int] = {}
@@ -96,6 +101,12 @@ class CompanionStore:
 
         # Starter selection flag for first launch
         self.starter_chosen: bool = False
+
+        # Achievements & Badges tracking (v0.2.0)
+        self.unlocked_achievements: dict[str, float] = {}  # badge_id -> timestamp
+        self.purchased_egg_tiers: list[str] = []
+        self.total_hatches: int = 0
+        self.on_achievement_callbacks = []
 
         self.load()
 
@@ -116,6 +127,11 @@ class CompanionStore:
                 "is_shiny": self.active.is_shiny,
                 "hatched_at": self.active.hatched_at,
                 "evolution_chain_ids": self.active.evolution_chain_ids,
+                "friendship": self.active.friendship,
+                "last_pet_date": self.active.last_pet_date,
+                "daily_pet_count": self.active.daily_pet_count,
+                "treats_eaten_today": self.active.treats_eaten_today,
+                "last_treat_date": self.active.last_treat_date,
             }
             if self.active
             else None,
@@ -135,8 +151,12 @@ class CompanionStore:
             "taskbar_snap": self.taskbar_snap,
             "sound_enabled": self.sound_enabled,
             "roaming_enabled": self.roaming_enabled,
+            "spawn_intro_enabled": self.spawn_intro_enabled,
             "starter_chosen": self.starter_chosen,
             "daily_history": self.daily_history,
+            "unlocked_achievements": self.unlocked_achievements,
+            "purchased_egg_tiers": self.purchased_egg_tiers,
+            "total_hatches": self.total_hatches,
         }
         try:
             with open(STATE_FILE, "w", encoding="utf-8") as f:
@@ -164,6 +184,11 @@ class CompanionStore:
                     is_shiny=act_data["is_shiny"],
                     hatched_at=act_data.get("hatched_at", time.time()),
                     evolution_chain_ids=act_data.get("evolution_chain_ids", []),
+                    friendship=act_data.get("friendship", 50),
+                    last_pet_date=act_data.get("last_pet_date", ""),
+                    daily_pet_count=act_data.get("daily_pet_count", 0),
+                    treats_eaten_today=act_data.get("treats_eaten_today", 0),
+                    last_treat_date=act_data.get("last_treat_date", ""),
                 )
             else:
                 self.active = None
@@ -176,10 +201,13 @@ class CompanionStore:
                 "inventory",
                 {
                     ItemKind.RARE_CANDY.value: 1,
+                    ItemKind.ORAN_BERRY.value: 0,
                     ItemKind.MINT.value: 0,
                     ItemKind.SHINY_CHARM.value: 0,
                 },
             )
+            if ItemKind.ORAN_BERRY.value not in self.inventory:
+                self.inventory[ItemKind.ORAN_BERRY.value] = 0
             self.spendable_tokens = data.get("spendable_tokens", 0)
             self.total_tokens_burned_lifetime = data.get("total_tokens_burned_lifetime", 0)
             self.daily_token_limit = data.get("daily_token_limit", 20_000_000)
@@ -191,10 +219,45 @@ class CompanionStore:
             self.taskbar_snap = data.get("taskbar_snap", False)
             self.sound_enabled = data.get("sound_enabled", True)
             self.roaming_enabled = data.get("roaming_enabled", True)
+            self.spawn_intro_enabled = data.get("spawn_intro_enabled", True)
             self.starter_chosen = data.get("starter_chosen", self.active is not None)
             self.daily_history = data.get("daily_history", {})
+            self.unlocked_achievements = data.get("unlocked_achievements", {})
+            self.purchased_egg_tiers = data.get("purchased_egg_tiers", [])
+            self.total_hatches = data.get("total_hatches", len(self.catch_log))
+
+            # Retro-migration for existing users without achievement records
+            self._run_achievement_retro_migration()
         except Exception:
             pass
+
+    def _run_achievement_retro_migration(self):
+        """Retroactively grants achievements based on existing savegame progression."""
+        # 100M Burn Club
+        if (
+            self.total_tokens_burned_lifetime >= 100_000_000
+            and "100m_burn_club" not in self.unlocked_achievements
+        ):
+            self.unlock_achievement("100m_burn_club")
+        # First Hatch
+        if (
+            self.total_hatches >= 1 or len(self.catch_log) >= 1
+        ) and "first_hatch" not in self.unlocked_achievements:
+            self.unlock_achievement("first_hatch")
+        # Shiny Hunter
+        has_shiny = any(bool(entry.get("shiny")) for entry in self.pokedex.values()) or (
+            self.active and self.active.is_shiny
+        )
+        if has_shiny and "shiny_hunter" not in self.unlocked_achievements:
+            self.unlock_achievement("shiny_hunter")
+        # Senior Professor
+        if len(self.catch_log) >= 5 and "senior_professor" not in self.unlocked_achievements:
+            self.unlock_achievement("senior_professor")
+        # Egg Hoarder
+        if {"uncommon", "rare", "legendary"}.issubset(
+            set(self.purchased_egg_tiers)
+        ) and "egg_hoarder" not in self.unlocked_achievements:
+            self.unlock_achievement("egg_hoarder")
 
     @property
     def is_egg(self) -> bool:
@@ -248,7 +311,13 @@ class CompanionStore:
 
         self.spendable_tokens += delta
         self.total_tokens_burned_lifetime += delta
-        self._add_companion_exp(delta)
+
+        # High friendship (>= 80%) grants +10% bonus companion EXP
+        effective_exp = delta
+        if self.active and self.active.friendship >= 80:
+            effective_exp = int(delta * 1.10)
+
+        self._add_companion_exp(effective_exp)
         self.save()
 
     def _add_companion_exp(self, delta: int):
@@ -321,6 +390,7 @@ class CompanionStore:
         )
         self.egg_usage = 0
         self.egg_tier = EggTier.STANDARD
+        self.total_hatches += 1
 
         # Register in Pokédex immediately
         self._record_pokedex(self.active.species_id, self.active.species_name, self.active.is_shiny)
@@ -381,9 +451,6 @@ class CompanionStore:
                 is_shiny=self.active.is_shiny,
             )
         )
-
-        for cb in self.on_hatch_callbacks:
-            cb(self.active)
         self.save()
         return True
 
@@ -459,21 +526,108 @@ class CompanionStore:
             cb(graduated_pokemon)
         self.save()
 
+    def pet_companion(self) -> tuple[bool, int, str]:
+        """
+        Interacts with (pets) the active companion.
+        Grants +5 Friendship per pet up to 4 times a day (max +20% daily).
+        Returns (success, current_friendship, feedback_message).
+        """
+        if self.is_egg or not self.active:
+            return False, 0, "No active Pokémon to pet."
+
+        today_str = time.strftime("%Y-%m-%d")
+        if self.active.last_pet_date != today_str:
+            self.active.last_pet_date = today_str
+            self.active.daily_pet_count = 0
+
+        if self.active.daily_pet_count >= 4:
+            return (
+                False,
+                self.active.friendship,
+                f"{self.active.species_name} is feeling plenty loved today! (Daily limit reached)",
+            )
+
+        self.active.daily_pet_count += 1
+        gain = 5
+        old_f = self.active.friendship
+        self.active.friendship = min(100, self.active.friendship + gain)
+        actual_gain = self.active.friendship - old_f
+
+        self.ceremony_queue.append(
+            CeremonyEvent(
+                event_type=CeremonyEvent.FRIENDSHIP_UP,
+                friendship_amount=actual_gain,
+                species_name=self.active.species_name,
+            )
+        )
+        self.save()
+        return (
+            True,
+            self.active.friendship,
+            f"Petted {self.active.species_name}! (+{gain}% Friendship, {self.active.friendship}%)",
+        )
+
+    def feed_treat(self, item_kind: ItemKind | str) -> tuple[bool, int, int]:
+        """
+        Feeds a treat (Rare Candy or Oran Berry) to the companion.
+        Consumes 1 item, awards EXP and Friendship.
+        Returns (success, xp_gained, new_friendship).
+        """
+        if isinstance(item_kind, str):
+            try:
+                item_kind = ItemKind(item_kind)
+            except ValueError:
+                return False, 0, 0
+
+        if self.inventory.get(item_kind.value, 0) <= 0:
+            return False, 0, 0
+
+        self.inventory[item_kind.value] -= 1
+
+        today_str = time.strftime("%Y-%m-%d")
+        if self.active:
+            if self.active.last_treat_date != today_str:
+                self.active.last_treat_date = today_str
+                self.active.treats_eaten_today = 0
+            self.active.treats_eaten_today += 1
+
+        if item_kind == ItemKind.RARE_CANDY:
+            xp = 100_000_000
+            f_gain = 15
+        elif item_kind == ItemKind.ORAN_BERRY:
+            xp = 10_000_000
+            f_gain = 10
+        else:
+            xp = 0
+            f_gain = 0
+
+        if self.active and f_gain > 0:
+            self.active.friendship = min(100, self.active.friendship + f_gain)
+
+        self.ceremony_queue.append(
+            CeremonyEvent(
+                event_type=CeremonyEvent.CANDY_XP,
+                xp_amount=xp,
+                item_kind=item_kind.value,
+            )
+        )
+
+        if xp > 0:
+            self._add_companion_exp(xp)
+
+        self.save()
+        f_val = self.active.friendship if self.active else 0
+        return True, xp, f_val
+
     def use_item(self, item: ItemKind) -> bool:
         """Uses an item from the inventory."""
         count = self.inventory.get(item.value, 0)
         if count <= 0:
             return False
 
-        if item == ItemKind.RARE_CANDY:
-            self.inventory[item.value] -= 1
-            # Add 100M EXP
-            self.ceremony_queue.append(
-                CeremonyEvent(event_type=CeremonyEvent.CANDY_XP, xp_amount=100_000_000)
-            )
-            self.add_tokens(100_000_000)
-            self.save()
-            return True
+        if item in (ItemKind.RARE_CANDY, ItemKind.ORAN_BERRY):
+            success, _, _ = self.feed_treat(item)
+            return success
         elif item == ItemKind.SHINY_CHARM:
             # Passive item, already active when owned
             return True
@@ -593,7 +747,44 @@ class CompanionStore:
         self.active = None
         self.egg_usage = 0
         self.egg_tier = tier
+        if tier.value not in self.purchased_egg_tiers:
+            self.purchased_egg_tiers.append(tier.value)
         self.save()
+        return True
+
+    def unlock_achievement(self, badge_id: str) -> bool:
+        """
+        Unlocks an achievement badge, awards tokens / items, and triggers callbacks.
+        Guaranteed idempotent: returns False if already unlocked.
+        """
+        if badge_id in self.unlocked_achievements:
+            return False
+
+        from .models import ACHIEVEMENT_DEFINITIONS
+
+        badge = ACHIEVEMENT_DEFINITIONS.get(badge_id)
+        if not badge:
+            return False
+
+        self.unlocked_achievements[badge_id] = time.time()
+
+        # Grant rewards
+        if badge.reward_tokens > 0:
+            self.spendable_tokens += badge.reward_tokens
+
+        if badge.reward_item:
+            count = max(1, badge.reward_item_count)
+            self.inventory[badge.reward_item.value] = (
+                self.inventory.get(badge.reward_item.value, 0) + count
+            )
+
+        self.save()
+
+        for cb in self.on_achievement_callbacks:
+            try:
+                cb(badge)
+            except Exception:
+                pass
         return True
 
     def reset_to_fresh_egg(self):
@@ -603,7 +794,9 @@ class CompanionStore:
         self.egg_tier = EggTier.STANDARD
         self.save()
 
-    def _record_pokedex(self, species_id: int, name: str, is_shiny: bool, rarity: str | None = None):
+    def _record_pokedex(
+        self, species_id: int, name: str, is_shiny: bool, rarity: str | None = None
+    ):
         key = str(species_id)
         current = self.pokedex.get(key, {})
         shiny_owned = current.get("shiny", False) or is_shiny

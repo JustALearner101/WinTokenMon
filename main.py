@@ -50,15 +50,19 @@ def log_error(err: str):
 
 def tk_safe(func):
     """Decorator to catch exceptions and log them safely without crashing the Tk mainloop."""
+
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception:
             log_error(f"{func.__name__} Error: {traceback.format_exc()}")
+
     return wrapper
 
 
 try:
+    from core.achievement_engine import AchievementEngine
+    from core.audio_manager import play_sfx_achievement
     from core.companion_store import CompanionStore
     from core.token_reader import TokenUsageSummary, WindowsTokenReader
     from ui.dashboard import DashboardWindow
@@ -74,6 +78,9 @@ class WinTokenMonApp:
     def __init__(self):
         try:
             self.store = CompanionStore()
+            self.achievement_engine = AchievementEngine(self.store)
+            self.store.on_achievement_callbacks.append(self.on_achievement_unlocked)
+
             self.reader = WindowsTokenReader()
             self.summary = TokenUsageSummary()
             self.dashboard_window = None
@@ -131,6 +138,7 @@ class WinTokenMonApp:
                     on_opacity_change=self.on_pet_opacity_changed,
                     on_taskbar_snap=self.on_taskbar_snap,
                     on_roaming_toggle=self.on_roaming_toggled,
+                    achievement_engine=self.achievement_engine,
                 )
             else:
                 self.dashboard_window.win.lift()
@@ -149,6 +157,31 @@ class WinTokenMonApp:
 
     def on_roaming_toggled(self, enabled: bool):
         self.pet.set_roaming_enabled(enabled)
+
+    @tk_safe
+    def on_achievement_unlocked(self, badge):
+        """Triggers audio fanfare, tray notification, and in-app toast when a badge is unlocked."""
+        if self.store.sound_enabled:
+            play_sfx_achievement()
+
+        reward_txt = (
+            f" (+{badge.reward_tokens // 1_000_000}M Tokens)" if badge.reward_tokens else ""
+        )
+        if badge.reward_item:
+            reward_txt = f" (+{badge.reward_item_count}x {badge.reward_item.title})"
+
+        self.tray.send_notification(
+            "🎖️ Achievement Unlocked!",
+            f"{badge.icon_emoji} {badge.title}{reward_txt}\n{badge.description}",
+        )
+
+        if self.dashboard_window and self.dashboard_window.win.winfo_exists():
+            self.dashboard_window.show_toast(
+                f"🏆 Achievement Unlocked: {badge.title}!{reward_txt}",
+                bg_color="#F1C40F",
+                text_color="#181825",
+            )
+            self.dashboard_window.refresh_trophies_tab()
 
     @tk_safe
     def trigger_test_notification(self):
@@ -178,6 +211,9 @@ class WinTokenMonApp:
         self.summary = summary
         if delta > 0:
             self.store.add_tokens(delta)
+
+        # Evaluate real-time achievements (Night Owl, Overclock, Multi-Tool, 100M Burn)
+        self.achievement_engine.on_token_poll(delta, self.summary)
 
         # Record in 7-day daily history (throttled inside store)
         self.store.record_daily_tokens(self.summary.today_tokens)

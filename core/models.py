@@ -61,6 +61,7 @@ class PokemonNature(str, Enum):
 
 class ItemKind(str, Enum):
     RARE_CANDY = "rareCandy"
+    ORAN_BERRY = "oranBerry"
     MINT = "mint"
     SHINY_CHARM = "shinyCharm"
 
@@ -68,6 +69,7 @@ class ItemKind(str, Enum):
     def title(self) -> str:
         names = {
             ItemKind.RARE_CANDY: "Rare Candy",
+            ItemKind.ORAN_BERRY: "Oran Berry",
             ItemKind.MINT: "Nature Mint",
             ItemKind.SHINY_CHARM: "Shiny Charm",
         }
@@ -76,7 +78,8 @@ class ItemKind(str, Enum):
     @property
     def description(self) -> str:
         descs = {
-            ItemKind.RARE_CANDY: "Grants 100M bonus token EXP immediately.",
+            ItemKind.RARE_CANDY: "Grants 100M bonus token EXP immediately and +15 Friendship.",
+            ItemKind.ORAN_BERRY: "A sweet berry that grants 10M token EXP and +10 Friendship.",
             ItemKind.MINT: "Re-rolls your active Pokémon's nature.",
             ItemKind.SHINY_CHARM: "Permanently boosts shiny egg hatch probability (1/129 → 1/40).",
         }
@@ -86,6 +89,7 @@ class ItemKind(str, Enum):
     def price_tokens(self) -> int:
         prices = {
             ItemKind.RARE_CANDY: 25_000_000,  # 25M tokens
+            ItemKind.ORAN_BERRY: 5_000_000,  # 5M tokens
             ItemKind.MINT: 50_000_000,  # 50M tokens
             ItemKind.SHINY_CHARM: 500_000_000,  # 500M tokens
         }
@@ -93,7 +97,12 @@ class ItemKind(str, Enum):
 
     @property
     def emoji(self) -> str:
-        emojis = {ItemKind.RARE_CANDY: "🍬", ItemKind.MINT: "🌿", ItemKind.SHINY_CHARM: "✨"}
+        emojis = {
+            ItemKind.RARE_CANDY: "🍬",
+            ItemKind.ORAN_BERRY: "🫐",
+            ItemKind.MINT: "🌿",
+            ItemKind.SHINY_CHARM: "✨",
+        }
         return emojis.get(self, "📦")
 
 
@@ -159,6 +168,11 @@ class ActivePokemon:
     is_shiny: bool
     hatched_at: float = field(default_factory=time.time)
     evolution_chain_ids: list[int] = field(default_factory=list)
+    friendship: int = 50  # 0 to 100
+    last_pet_date: str = ""
+    daily_pet_count: int = 0
+    treats_eaten_today: int = 0
+    last_treat_date: str = ""
 
 
 @dataclass
@@ -170,3 +184,117 @@ class CaughtPokemon:
     is_shiny: bool
     caught_at: float
     total_tokens_spent: int
+
+
+class BadgeTier(str, Enum):
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
+    PLATINUM = "platinum"
+
+    @property
+    def color_hex(self) -> str:
+        colors = {
+            BadgeTier.BRONZE: "#CD7F32",
+            BadgeTier.SILVER: "#C0C0C0",
+            BadgeTier.GOLD: "#F1C40F",
+            BadgeTier.PLATINUM: "#A0B2C6",
+        }
+        return colors.get(self, "#C0C0C0")
+
+    @property
+    def title(self) -> str:
+        return self.value.capitalize()
+
+
+@dataclass
+class AchievementDef:
+    id: str
+    title: str
+    description: str
+    tier: BadgeTier
+    icon_emoji: str
+    reward_tokens: int = 0
+    reward_item: ItemKind | None = None
+    reward_item_count: int = 0
+    category: str = "General"
+
+
+ACHIEVEMENT_DEFINITIONS: dict[str, AchievementDef] = {
+    "first_hatch": AchievementDef(
+        id="first_hatch",
+        title="First Hatch",
+        description="Hatch your very first Pokémon companion from an egg.",
+        tier=BadgeTier.BRONZE,
+        icon_emoji="🐣",
+        reward_tokens=10_000_000,
+        category="Milestone",
+    ),
+    "night_owl": AchievementDef(
+        id="night_owl",
+        title="Night Owl Coder",
+        description="Burn >100k tokens between 00:00 and 05:00 local time.",
+        tier=BadgeTier.SILVER,
+        icon_emoji="🦉",
+        reward_tokens=5_000_000,
+        category="Habit",
+    ),
+    "overclock": AchievementDef(
+        id="overclock",
+        title="Token Overclock",
+        description="Burn >1M tokens in a 1-hour rolling window.",
+        tier=BadgeTier.SILVER,
+        icon_emoji="⚡",
+        reward_item=ItemKind.RARE_CANDY,
+        reward_item_count=1,
+        category="Speed",
+    ),
+    "multi_tool": AchievementDef(
+        id="multi_tool",
+        title="Multi-Tool Wizard",
+        description="Burn tokens across 3+ different AI tools in a single day.",
+        tier=BadgeTier.SILVER,
+        icon_emoji="🧙‍♂️",
+        reward_item=ItemKind.MINT,
+        reward_item_count=2,
+        category="Versatility",
+    ),
+    "100m_burn_club": AchievementDef(
+        id="100m_burn_club",
+        title="100M Burn Club",
+        description="Accumulate 100M total lifetime AI tokens burned.",
+        tier=BadgeTier.GOLD,
+        icon_emoji="💯",
+        reward_tokens=25_000_000,
+        category="Endurance",
+    ),
+    "shiny_hunter": AchievementDef(
+        id="shiny_hunter",
+        title="Shiny Hunter",
+        description="Hatch a rare shiny Pokémon variant.",
+        tier=BadgeTier.GOLD,
+        icon_emoji="✨",
+        reward_item=ItemKind.SHINY_CHARM,
+        reward_item_count=1,
+        category="Luck",
+    ),
+    "senior_professor": AchievementDef(
+        id="senior_professor",
+        title="Senior Professor",
+        description="Graduate 5 fully-evolved Pokémon to Senior status.",
+        tier=BadgeTier.GOLD,
+        icon_emoji="🎓",
+        reward_item=ItemKind.RARE_CANDY,
+        reward_item_count=5,
+        category="Mastery",
+    ),
+    "egg_hoarder": AchievementDef(
+        id="egg_hoarder",
+        title="Egg Hoarder",
+        description="Adopt Uncommon, Rare, and Legendary egg tiers from the shop.",
+        tier=BadgeTier.PLATINUM,
+        icon_emoji="🥚",
+        reward_tokens=50_000_000,
+        category="Economy",
+    ),
+}

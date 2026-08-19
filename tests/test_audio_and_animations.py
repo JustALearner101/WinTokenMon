@@ -77,6 +77,45 @@ class TestAudioAndAnimations(unittest.TestCase):
         self.assertEqual(egg_img.size, (110, 110))
         self.assertEqual(egg_img.mode, "RGBA")
 
+    def test_create_pokeball_image_returns_valid_image(self):
+        """Tests that create_pokeball_image generates valid RGBA PIL Images for closed and open states."""
+        from ui.desktop_pet import create_pokeball_image
+
+        ball_closed = create_pokeball_image((64, 64), is_open=False)
+        self.assertIsNotNone(ball_closed)
+        self.assertEqual(ball_closed.size, (64, 64))
+        self.assertEqual(ball_closed.mode, "RGBA")
+
+        ball_open = create_pokeball_image((64, 64), is_open=True)
+        self.assertIsNotNone(ball_open)
+        self.assertEqual(ball_open.size, (64, 64))
+        self.assertEqual(ball_open.mode, "RGBA")
+
+    def test_pokeball_bounce_and_release_wav_synthesizers(self):
+        """Tests that in-memory Pokéball audio synthesizers produce valid RIFF WAV audio data."""
+        from core.audio_manager import (
+            _generate_crunch_wav,
+            _generate_heart_wav,
+            _generate_pokeball_bounce_wav,
+            _generate_pokeball_release_wav,
+        )
+
+        for gen_fn in (
+            _generate_crunch_wav,
+            _generate_heart_wav,
+            _generate_pokeball_bounce_wav,
+            _generate_pokeball_release_wav,
+        ):
+            data = gen_fn()
+            self.assertTrue(len(data) > 0)
+            self.assertTrue(data.startswith(b"RIFF"))
+            buf = io.BytesIO(data)
+            with wave.open(buf, "rb") as w:
+                self.assertEqual(w.getnchannels(), 1)
+                self.assertEqual(w.getsampwidth(), 2)
+                self.assertEqual(w.getframerate(), 44100)
+                self.assertTrue(w.getnframes() > 100)
+
 
 if __name__ == "__main__":
     unittest.main()

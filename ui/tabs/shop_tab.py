@@ -79,7 +79,12 @@ class ShopTabView:
             (
                 ItemKind.RARE_CANDY,
                 "🍬 Rare Candy",
-                "Gives your active Pokémon 100M bonus token EXP immediately.",
+                "Gives your active Pokémon 100M bonus token EXP and +15% Affection immediately.",
+            ),
+            (
+                ItemKind.ORAN_BERRY,
+                "🫐 Oran Berry",
+                "A delicious berry granting 10M token EXP and +10% Affection immediately.",
             ),
             (
                 ItemKind.MINT,

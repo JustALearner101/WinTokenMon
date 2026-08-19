@@ -20,7 +20,13 @@ from ui.dashboard_theme import (
     get_pokemon_element_type,
 )
 from ui.modals import NatureSelectorModal, PokedexInspectorModal
-from ui.tabs import HomeTabView, PokedexTabView, SettingsTabView, ShopTabView
+from ui.tabs import (
+    HomeTabView,
+    PokedexTabView,
+    SettingsTabView,
+    ShopTabView,
+    TrophiesTabView,
+)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -50,6 +56,7 @@ class DashboardWindow:
         on_opacity_change: Callable[[int], None] | None = None,
         on_taskbar_snap: Callable[[], None] | None = None,
         on_roaming_toggle: Callable[[bool], None] | None = None,
+        achievement_engine=None,
     ):
         self.store = store
         self.summary = summary
@@ -59,6 +66,7 @@ class DashboardWindow:
         self.on_opacity_change = on_opacity_change
         self.on_taskbar_snap = on_taskbar_snap
         self.on_roaming_toggle = on_roaming_toggle
+        self.achievement_engine = achievement_engine
 
         # In-Memory Sprite Image Cache: (species_id, is_shiny, size) -> CTkImage
         self._sprite_cache: dict[tuple[int, bool, int], ctk.CTkImage] = {}
@@ -66,10 +74,12 @@ class DashboardWindow:
         # Lazy loading tab views
         self.home_tab_view: HomeTabView | None = None
         self.pokedex_tab_view: PokedexTabView | None = None
+        self.trophies_tab_view: TrophiesTabView | None = None
         self.shop_tab_view: ShopTabView | None = None
         self.settings_tab_view: SettingsTabView | None = None
 
         self._pokedex_loaded = False
+        self._trophies_loaded = False
         self._shop_loaded = False
         self._settings_loaded = False
 
@@ -100,6 +110,7 @@ class DashboardWindow:
 
         self.tab_home = self.tabview.add("🐾 Companion & HUD")
         self.tab_pokedex = self.tabview.add("📖 Pokédex")
+        self.tab_trophies = self.tabview.add("🏆 Trophies")
         self.tab_shop = self.tabview.add("🛒 Shop & Bag")
         self.tab_settings = self.tabview.add("⚙️ Preferences")
 
@@ -112,6 +123,19 @@ class DashboardWindow:
         if active == "📖 Pokédex" and not self._pokedex_loaded:
             self.pokedex_tab_view = PokedexTabView(self.tab_pokedex, self)
             self._pokedex_loaded = True
+        elif active == "🏆 Trophies" and not self._trophies_loaded:
+            if self.achievement_engine is not None:
+                self.trophies_tab_view = TrophiesTabView(
+                    self.tab_trophies, self.store, self.achievement_engine
+                )
+            else:
+                from core.achievement_engine import AchievementEngine
+
+                self.achievement_engine = AchievementEngine(self.store)
+                self.trophies_tab_view = TrophiesTabView(
+                    self.tab_trophies, self.store, self.achievement_engine
+                )
+            self._trophies_loaded = True
         elif active == "🛒 Shop & Bag" and not self._shop_loaded:
             self.shop_tab_view = ShopTabView(self.tab_shop, self)
             self._shop_loaded = True
@@ -144,9 +168,7 @@ class DashboardWindow:
         """Backward-compatible alias for get_cached_sprite."""
         return self.get_cached_sprite(species_id, is_shiny, size)
 
-    def show_toast(
-        self, message: str, bg_color: str = "#2ECC71", text_color: str = "#181825"
-    ):
+    def show_toast(self, message: str, bg_color: str = "#2ECC71", text_color: str = "#181825"):
         """Displays an animated in-app toast notification banner."""
         if self._toast_hide_job:
             try:
@@ -176,6 +198,11 @@ class DashboardWindow:
         if self.pokedex_tab_view and self._pokedex_loaded:
             self.pokedex_tab_view.refresh()
 
+    def refresh_trophies_tab(self):
+        """Refreshes the Trophies tab view if loaded."""
+        if self.trophies_tab_view and self._trophies_loaded:
+            self.trophies_tab_view.refresh()
+
     def refresh_shop_tab(self):
         """Refreshes the Shop tab view if loaded."""
         if self.shop_tab_view and self._shop_loaded:
@@ -186,3 +213,4 @@ class DashboardWindow:
         self.summary = summary
         if self.win.winfo_exists():
             self.refresh_home_view()
+            self.refresh_trophies_tab()

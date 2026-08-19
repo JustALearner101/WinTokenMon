@@ -138,6 +138,7 @@ class TokenUsageSummary:
         self.weekly_tokens: int = 0
         self.lifetime_tokens: int = 0
         self.by_source: dict[str, int] = {}
+        self.by_source_today: dict[str, int] = {}
         self.last_scanned: float = time.time()
 
 
@@ -504,9 +505,9 @@ class WindowsTokenReader:
             if not os.path.exists(koma_dir):
                 continue
 
-            json_files = glob.glob(os.path.join(koma_dir, "**", "*.json"), recursive=True) + glob.glob(
-                os.path.join(koma_dir, "**", "*.jsonl"), recursive=True
-            )
+            json_files = glob.glob(
+                os.path.join(koma_dir, "**", "*.json"), recursive=True
+            ) + glob.glob(os.path.join(koma_dir, "**", "*.jsonl"), recursive=True)
 
             for path in json_files:
                 try:
@@ -684,6 +685,7 @@ class WindowsTokenReader:
                 summary.today_input += e["input"]
                 summary.today_output += e["output"]
                 summary.today_cache += e["cache"]
+                summary.by_source_today[src] = summary.by_source_today.get(src, 0) + tok
 
             if ts >= five_hours_ago:
                 summary.rolling_5h_tokens += tok

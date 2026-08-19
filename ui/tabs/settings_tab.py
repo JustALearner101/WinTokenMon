@@ -105,6 +105,21 @@ class SettingsTabView:
             self.switch_roaming.deselect()
         self.switch_roaming.pack(side="left")
 
+        # Spawn Intro Animation Switch Row
+        intro_row = ctk.CTkFrame(pet_card, fg_color="transparent")
+        intro_row.pack(fill="x", padx=14, pady=(0, 10))
+
+        self.switch_spawn_intro = ctk.CTkSwitch(
+            intro_row,
+            text="🔴 Pokéball Entrance Animation on Startup",
+            command=self.action_toggle_spawn_intro,
+        )
+        if getattr(self.store, "spawn_intro_enabled", True):
+            self.switch_spawn_intro.select()
+        else:
+            self.switch_spawn_intro.deselect()
+        self.switch_spawn_intro.pack(side="left")
+
         # Audio Section
         sound_card = ctk.CTkFrame(frame, corner_radius=10)
         sound_card.pack(fill="x", padx=6, pady=(0, 10))
@@ -296,6 +311,13 @@ class SettingsTabView:
         self.dashboard.show_toast(f"🐾 Autonomous roaming {status_str}!")
         if self.dashboard.on_roaming_toggle:
             self.dashboard.on_roaming_toggle(val)
+
+    def action_toggle_spawn_intro(self):
+        val = bool(self.switch_spawn_intro.get())
+        self.store.spawn_intro_enabled = val
+        self.store.save()
+        status_str = "enabled" if val else "disabled"
+        self.dashboard.show_toast(f"🔴 Pokéball entrance animation {status_str}!")
 
     def action_toggle_sound(self):
         val = bool(self.switch_sound.get())
