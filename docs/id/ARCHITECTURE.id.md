@@ -52,10 +52,10 @@ flowchart TD
 
     AG & CL & CR & CX & CP & KM --> TR
     TR -->|Ringkasan Penggunaan & Delta| APP
-    APP -->|add_tokens(delta)| CS
+    APP -->|"add_tokens(delta)"| CS
     APP -->|update berkala| PET & DASH & TRAY
     APP -->|wizard pertama kali| STARTER
-    STARTER -->|choose_starter(species_id)| CS
+    STARTER -->|"choose_starter(species_id)"| CS
     CS -->|Kirim Event Ceremony| PET
     CS -->|Peringatan Ambang Batas| TRAY
     PET -->|SFX Ceremony & Klik| AM
