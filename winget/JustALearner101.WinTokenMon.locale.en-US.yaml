@@ -1,22 +1,23 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: JustALearner101.WinTokenMon
-PackageVersion: 0.1.0-beta
+PackageVersion: 1.0.0
 PackageLocale: en-US
 Publisher: WinTokenMon Contributors
-PublisherUrl: https://github.com/YourUsername/PokeTokenBar-Win
-PublisherSupportUrl: https://github.com/YourUsername/PokeTokenBar-Win/issues
+PublisherUrl: https://github.com/JustALearner101/WinTokenMon
+PublisherSupportUrl: https://github.com/JustALearner101/WinTokenMon/issues
 Author: WinTokenMon Contributors
 PackageName: WinTokenMon
-PackageUrl: https://github.com/YourUsername/PokeTokenBar-Win
+PackageUrl: https://github.com/JustALearner101/WinTokenMon
 License: MIT
-LicenseUrl: https://github.com/YourUsername/PokeTokenBar-Win/blob/main/LICENSE
+LicenseUrl: https://github.com/JustALearner101/WinTokenMon/blob/main/LICENSE
 Copyright: Copyright (c) 2026 WinTokenMon Contributors
 ShortDescription: Turn your daily AI coding tokens into a living Pokémon companion on Windows!
 Description: |
   WinTokenMon is an open-source, gamified developer productivity desktop application
   that tracks local AI coding token usage (Antigravity CLI, Claude Code, Cursor IDE, Codex CLI,
-  GitHub Copilot CLI) in real-time. Features Shimeji-style transparent desktop pet,
-  walking physics, audio cries, 8-bit chiptune synthesizer, 7-day analytics, and Pokédex.
+  GitHub Copilot CLI, Aider, Windsurf, Cline, Roo Code) in real-time. Features Shimeji-style
+  transparent desktop pet, walking physics, audio cries, 8-bit chiptune synthesizer,
+  achievements, compact HUD mode, and Pokédex.
 Moniker: wintokenmon
 Tags:
   - pokemon
@@ -26,6 +27,6 @@ Tags:
   - desktop-pet
   - shimeji
   - windows
-ReleaseNotesUrl: https://github.com/YourUsername/PokeTokenBar-Win/releases/tag/v0.1.0-beta
+ReleaseNotesUrl: https://github.com/JustALearner101/WinTokenMon/releases/tag/v1.0.0
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

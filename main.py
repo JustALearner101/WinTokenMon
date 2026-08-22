@@ -51,10 +51,12 @@ def tk_safe(func):
 
 
 try:
+    from core import __version__
     from core.achievement_engine import AchievementEngine
     from core.audio_manager import play_sfx_achievement
     from core.companion_store import CompanionStore
     from core.token_reader import TokenUsageSummary, WindowsTokenReader
+    from core.updater import start_background_check
     from ui.compact_hud import CompactHUDWindow
     from ui.dashboard import DashboardWindow
     from ui.desktop_pet import DesktopPetWindow
@@ -88,6 +90,7 @@ class WinTokenMonApp:
             self._scan_stop = threading.Event()
             self._exit_requested = False
             self._scan_results: queue.Queue[tuple] = queue.Queue(maxsize=2)
+            self._ui_events: queue.Queue[tuple] = queue.Queue()
 
             # Apply saved provider toggles to the scanner engine
             self.reader.enabled_sources = {
@@ -118,6 +121,9 @@ class WinTokenMonApp:
             threading.Thread(target=self._scanner_loop, daemon=True).start()
             self.request_scan()
             self.pet.root.after(250, self._pump_scan_results)
+
+            # Daily (cooldown-aware) auto-update check in the background
+            start_background_check(self._on_update_available)
 
             # Surface Tk mainloop exceptions to the log file instead of stderr void
             self.pet.root.report_callback_exception = self._on_tk_exception
@@ -273,7 +279,32 @@ class WinTokenMonApp:
                 self._apply_scan_results(summary, delta, velocity)
         except queue.Empty:
             pass
+        try:
+            while True:
+                kind, payload = self._ui_events.get_nowait()
+                if kind == "update_available":
+                    self._show_update_dialog(payload)
+        except queue.Empty:
+            pass
         self.pet.root.after(250, self._pump_scan_results)
+
+    def _on_update_available(self, info: dict):
+        """Updater worker callback: queue dialog display for the UI thread."""
+        self._ui_events.put(("update_available", info))
+
+    @tk_safe
+    def _show_update_dialog(self, info: dict):
+        try:
+            from ui.modals.update_modal import UpdateAvailableModal
+
+            UpdateAvailableModal(
+                self.pet.root,
+                info,
+                __version__,
+                on_install_started=self.exit_app,
+            )
+        except Exception as exc:
+            log_error(f"update dialog failed: {exc}")
 
     @tk_safe
     def _apply_scan_results(self, summary, delta: int, velocity: float):
