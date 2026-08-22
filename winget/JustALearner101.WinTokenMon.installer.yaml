@@ -12,7 +12,7 @@ InstallModes:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/JustALearner101/WinTokenMon/releases/download/v1.0.0/WinTokenMon-Setup-v1.0.0.exe
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: 0FCC770211BBF91F2B10FACE630E26DDB14C6B4C137FDBF95ABE949DADE59A2A
     Scope: user
 ManifestType: installer
 ManifestVersion: 1.6.0
