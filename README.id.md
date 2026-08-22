@@ -71,6 +71,13 @@
 - Windows 10 atau Windows 11 (64-bit)
 - Python 3.10, 3.11, 3.12, atau 3.14+
 
+> ### 🛡️ Pemberitahuan Windows SmartScreen
+> Saat pertama kali menjalankan installer atau file `.exe` portabel, Windows mungkin
+> menampilkan **"Windows protected your PC"**. Ini hal normal untuk aplikasi baru yang
+> belum di-sign secara digital — biner ini dapat direproduksi dari repositori open-source
+> ini dan checksum SHA256-nya dipublikasikan di setiap [rilis](https://github.com/JustALearner101/WinTokenMon/releases).
+> Untuk melanjutkan, klik **`More info` → `Run anyway`**.
+
 ### 2. Instalasi & Menjalankan
 
 1. **Clone repositori**:
