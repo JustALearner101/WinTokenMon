@@ -69,7 +69,7 @@
 
 ### 1. Prasyarat
 - Windows 10 atau Windows 11 (64-bit)
-- Python 3.10, 3.11, 3.12, atau 3.14+
+- Python 3.10+ hanya diperlukan untuk **Opsi C (jalankan dari source)**
 
 > ### 🛡️ Pemberitahuan Windows SmartScreen
 > Saat pertama kali menjalankan installer atau file `.exe` portabel, Windows mungkin
@@ -80,20 +80,36 @@
 
 ### 2. Instalasi & Menjalankan
 
+#### Opsi A — Unduh Installer atau Portable (Direkomendasikan)
+1. Buka halaman [**Releases**](https://github.com/JustALearner101/WinTokenMon/releases).
+2. Pilih salah satu:
+   - **`WinTokenMon-Setup-v1.0.0.exe`** — installer interaktif dengan opsi ikon desktop & autostart, atau
+   - **`WinTokenMon-v1.0.0-Portable.exe`** — build portabel satu file, tanpa instalasi.
+3. Verifikasi checksum SHA256 jika ingin ekstra aman (file `.sha256` dilampirkan di setiap rilis).
+4. Jalankan — selesai! Aplikasi otomatis mengecek pembaruan sekali sehari.
+
+#### Opsi B — Install via Winget *(segera hadir)*
+```
+winget install JustALearner101.WinTokenMon
+```
+Manifest sedang direview di [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs) — perintah ini akan aktif setelah PR di-merge.
+
+#### Opsi C — Jalankan dari Source (Developer)
+
 1. **Clone repositori**:
    ```powershell
-   git clone https://github.com/YourUsername/WinTokenMon.git
+   git clone https://github.com/JustALearner101/WinTokenMon.git
    cd WinTokenMon
    ```
 
-2. **Jalankan (Opsi A: Cepat dengan `uv` — Direkomendasikan)**:
+2. **Jalankan (Cepat dengan `uv` — Direkomendasikan)**:
    ```powershell
    # Setup virtual environment & dependensi otomatis
    uv sync
    uv run main.py
    ```
 
-3. **Jalankan (Opsi B: Standar dengan `pip`)**:
+3. **Jalankan (Standar dengan `pip`)**:
    ```powershell
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1

@@ -9,7 +9,7 @@ Selamat datang di direktori **Implementation Plans (`docs/plans/`)** untuk **Win
 ```mermaid
 timeline
     title WinTokenMon Evolution Roadmap
-    section Public Beta (Current)
+    section Public Beta
         v0.1.0-beta : Multi-Tool Scanner : Shimeji Desktop Pet : Starter Selection Gen 1-9 : Pokédex & Shop
     section Milestone 1
         v0.2.0 : Developer Achievements & Badges : Night Owl & Overclock Hooks : Trophy Cabinet UI
@@ -17,7 +17,7 @@ timeline
         v0.3.0 : Interactive Feeding on Desktop : Treat Drop Physics & Eating : Friendship Affection Bar
     section Milestone 3
         v0.4.0 : Compact HUD Floating Capsule : Taskbar Speedometer : Aider, Windsurf & Cline Scanners
-    section Production Release
+    section Production Release ✅ Live
         v1.0.0 : Windows Package Manager (Winget) : Automated Matrix CI/CD : In-App Auto-Updater
 ```
 

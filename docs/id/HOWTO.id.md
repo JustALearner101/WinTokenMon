@@ -170,7 +170,7 @@ uv run python scripts/build_exe.py
 ```
 
 ### Output File:
-- 🚀 **`dist/WinTokenMon-v0.1.0-beta-Portable.exe`** (~28.9 MB)
+- 🚀 **`dist/WinTokenMon-v<version>-Portable.exe`** (~28.9 MB)
 
 ---
 
@@ -188,15 +188,21 @@ winget install --id JRSoftware.InnoSetup --accept-source-agreements --accept-pac
 uv run python scripts/build_installer.py
 ```
 
+### Yang dilakukan script ini secara otomatis:
+1. Compile executable standalone terbaru menggunakan PyInstaller.
+2. Deteksi otomatis `ISCC.exe` dari path standar Windows (`Program Files` atau `%LOCALAPPDATA%`).
+3. Inject versi live dari `core.__version__` ke skrip Inno Setup (`/DMyAppVersion`) dan **menolak compile** jika executable portable yang sesuai versi tidak ditemukan — binary basi tidak akan pernah terbungkus.
+4. Compile `installer.iss` beserta lisensi, ikon desktop, dan skrip prompt uninstall.
+
 ### Output File:
-- 📦 **`dist/WinTokenMon-Setup-v0.1.0-beta.exe`** (~30.6 MB)
+- 📦 **`dist/WinTokenMon-Setup-v<version>.exe`** (~30 MB)
 
 ---
 
 ## 8. 🧹 Menguji Installer & Uninstaller di Windows
 
 ### Menguji Instalasi:
-1. Klik ganda `dist/WinTokenMon-Setup-v0.1.0-beta.exe`.
+1. Klik ganda `dist/WinTokenMon-Setup-v<version>.exe`.
 2. Klik tombol **Browse...** untuk menguji instalasi ke folder kustom.
 3. Centang opsi **Desktop Shortcut** dan **Start on Windows Boot**.
 4. Selesaikan instalasi dan pastikan aplikasi langsung berjalan dan melayang di desktop.

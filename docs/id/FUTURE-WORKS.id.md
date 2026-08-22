@@ -8,24 +8,30 @@ Dokumen ini menguraikan ikhtisar roadmap. Untuk dokumen RFC teknis lengkap denga
 
 ## 🧭 Ikhtisar Milestone
 
+> ✅ **Update status (22-08-2026)**: v1.0.0 Production GA sudah **live** — keempat milestone di bawah telah rilis. Bagian-bagian berikut dipertahankan sebagai referensi desain historis; satu-satunya item yang masih forward-looking adalah RFC Battle jangka jauh.
+
 ```mermaid
 timeline
     title Roadmap Pengembangan WinTokenMon
-    section Public Beta (Saat Ini)
+    section Public Beta
         v0.1.0-beta : Multi-Provider Token Readers : Shimeji Floating Pet : Walking Gait & Hop Physics : Audio Cries & Chiptune : Pokédex & Shop
-    section Milestone 1
+    section Milestone 1 ✅
         v0.2.0 : Sistem Pencapaian Developer : Notifikasi Night Owl & Overclock : Lemari Trophy Pokédex
-    section Milestone 2
+    section Milestone 2 ✅
         v0.3.0 : Memberi Makan Langsung di Layar : Fisika Jatuh Treat & Animasi Makan : Bar Persahabatan (Friendship Meter)
-    section Milestone 3
+    section Milestone 3 ✅
         v0.4.0 : Mode Floating HUD Pill Minimalis : Progress Bar Taskbar Langsung : Scanner AI Baru (Aider, Windsurf, Cline)
-    section Rilis Produksi
-        v1.0.0 : Validasi Build Binary Mandiri : Publikasi Resmi di Winget : Dukungan Pembaruan Otomatis
+    section Rilis Produksi ✅ Live
+        v1.0.0 : Build Binary Mandiri Terpublikasi : Winget Submission in Review : Mesin Auto-Update Sudah Rilis
+    section Berikutnya
+        v1.0.x : Rilis Patch via Auto-Updater : Membangun Reputasi SmartScreen
+    section Far Future
+        Battle RFC : Stat Engine EV/IV : Arena Turn-Based : PvE & Local LAN
 ```
 
 ---
 
-## 🏆 1. Sistem Pencapaian & Badge Developer (`v0.2.0`)
+## 🏆 1. Sistem Pencapaian & Badge Developer (`v0.2.0`) — ✅ SELESAI
 > 📑 **Dokumen Rencana Teknis (RFC)**: [**`docs/plans/v0.2.0-developer-achievements-and-badges.md`**](../plans/v0.2.0-developer-achievements-and-badges.md)
 
 ### Ikhtisar
@@ -46,7 +52,7 @@ Kerangka pencapaian yang memberikan hadiah bagi developer berdasarkan kebiasaan 
 
 ---
 
-## 🎈 2. Minigame Interaktif & Memberi Makan Langsung (`v0.3.0`)
+## 🎈 2. Minigame Interaktif & Memberi Makan Langsung (`v0.3.0`) — ✅ SELESAI
 > 📑 **Dokumen Rencana Teknis (RFC)**: [**`docs/plans/v0.3.0-interactive-feeding-and-friendship.md`**](../plans/v0.3.0-interactive-feeding-and-friendship.md)
 
 ### Mekanisme yang Direncanakan:
@@ -60,7 +66,7 @@ Kerangka pencapaian yang memberikan hadiah bagi developer berdasarkan kebiasaan 
 
 ---
 
-## 📊 3. Mode Floating HUD Pill & Scanner AI Tambahan (`v0.4.0`)
+## 📊 3. Mode Floating HUD Pill & Scanner AI Tambahan (`v0.4.0`) — ✅ SELESAI
 > 📑 **Dokumen Rencana Teknis (RFC)**: [**`docs/plans/v0.4.0-extended-ai-scanners-and-compact-hud.md`**](../plans/v0.4.0-extended-ai-scanners-and-compact-hud.md)
 
 ### Tampilan Konsep:
@@ -80,7 +86,7 @@ Kerangka pencapaian yang memberikan hadiah bagi developer berdasarkan kebiasaan 
 
 ---
 
-## 📦 4. Rilis Produksi & Distribusi Resmi (`v1.0.0`)
+## 📦 4. Rilis Produksi & Distribusi Resmi (`v1.0.0`) — ✅ LIVE
 > 📑 **Dokumen Rencana Teknis (RFC)**: [**`docs/plans/v1.0.0-production-release-and-winget.md`**](../plans/v1.0.0-production-release-and-winget.md)
 
 1. **Validasi Binary Rilis Mandiri**: Pengujian otomatis file portable `.exe` dan installer Inno Setup.
