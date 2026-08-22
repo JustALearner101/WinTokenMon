@@ -29,8 +29,7 @@ _FAILURE_COOLDOWN_S = 300  # retry 5 minutes after a network failure
 _HTTP_TIMEOUT_S = 5
 
 _state_lock = threading.Lock()
-_last_check_at: float | None = None
-_last_failed_at: float | None = None
+_last_failed_at: float | None = None  # monotonic; session-only network cooldown
 
 
 def parse_version(version: str) -> tuple[int, ...]:
@@ -59,48 +58,83 @@ def pick_setup_asset(assets: list[dict]) -> dict | None:
 
 def fetch_latest_release(timeout: float = _HTTP_TIMEOUT_S) -> dict | None:
     """Fetches the latest release payload from GitHub. Returns None on failure."""
-    global _last_failed_at
     try:
         req = urllib.request.Request(
             RELEASES_API_URL, headers={"User-Agent": f"WinTokenMon/{__version__}"}
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read())
-        with _state_lock:
-            _last_failed_at = None
-        return data
+            return json.loads(resp.read())
     except Exception as exc:
         log_once("updater.fetch", f"release check failed: {exc}")
-        with _state_lock:
-            _last_failed_at = time.monotonic()
         return None
 
 
-def check_for_update(force: bool = False) -> dict | None:
-    """Checks for a newer release, honoring the daily / failure cooldowns.
+def should_check(
+    now: float,
+    last_check_at: float,
+    *,
+    enabled: bool = True,
+    force: bool = False,
+) -> bool:
+    """Decides whether an update check may run right now.
 
-    Returns an update info dict when a newer version exists:
-        {"version", "notes", "download_url", "checksum_url", "release_url"}
-    Returns None when up-to-date, in cooldown, or on failure.
+    `now` and `last_check_at` are wall-clock epochs so the daily cadence
+    survives app restarts (persisted via state.json).
     """
-    global _last_check_at
+    if not enabled and not force:
+        return False
+    if not force and last_check_at > 0 and now - last_check_at < CHECK_INTERVAL_S:
+        return False
     with _state_lock:
-        now = time.monotonic()
-        if not force and _last_check_at is not None:
-            if now - _last_check_at < CHECK_INTERVAL_S:
-                return None
         failed = _last_failed_at
-        if failed is not None and now - failed < _FAILURE_COOLDOWN_S:
-            return None
-        _last_check_at = now
+        if failed is not None and (time.monotonic() - failed) < _FAILURE_COOLDOWN_S and not force:
+            return False
+    return True
 
+
+def check_for_update(
+    *,
+    enabled: bool = True,
+    skipped_version: str = "",
+    last_check_at: float = 0.0,
+    now: float | None = None,
+    force: bool = False,
+) -> dict | None:
+    """Checks for a newer release, honoring persisted preferences.
+
+    Args:
+        enabled: user preference `auto_check_updates_enabled`.
+        skipped_version: version string the user chose to skip.
+        last_check_at: epoch of the previous successful check (persisted).
+        now: current wall-clock epoch (defaults to time.time()).
+        force: bypass all cooldowns/toggles (manual "check now").
+
+    Returns an update info dict when a newer, non-skipped version exists:
+        {"version", "notes", "download_url", "checksum_url", "release_url"}
+    Returns None when up-to-date, skipped, disabled, in cooldown, or on failure.
+    """
+    if now is None:
+        now = time.time()
+    if not should_check(now, last_check_at, enabled=enabled, force=force):
+        return None
+
+    global _last_failed_at
     release = fetch_latest_release()
     if not release:
+        with _state_lock:
+            _last_failed_at = time.monotonic()  # short session retry cooldown
         return None
+
+    with _state_lock:
+        _last_failed_at = None  # network is healthy again
 
     tag = release.get("tag_name") or ""
     if not is_newer_version(tag, __version__):
         return None
+
+    info_version = tag.lstrip("v")
+    if skipped_version and info_version == skipped_version.lstrip("v"):
+        return None  # user chose to skip this version
 
     assets = release.get("assets") or []
     installer = pick_setup_asset(assets)
@@ -114,7 +148,7 @@ def check_for_update(force: bool = False) -> dict | None:
     )
 
     info = {
-        "version": tag.lstrip("v"),
+        "version": info_version,
         "notes": (release.get("body") or "").strip(),
         "download_url": (installer or {}).get("browser_download_url") or "",
         "checksum_url": (checksum_asset or {}).get("browser_download_url") or "",
@@ -201,14 +235,24 @@ def launch_installer(installer_path: str) -> bool:
         return False
 
 
-def start_background_check(on_update_available) -> threading.Thread:
+def start_background_check(
+    on_update_available,
+    *,
+    enabled: bool = True,
+    skipped_version: str = "",
+    last_check_at: float = 0.0,
+) -> threading.Thread:
     """Runs one cooldown-aware update check on a daemon thread.
 
     `on_update_available(info)` is invoked on completion when an update exists;
     wrap it so it marshals back to your UI thread.
     """
     def _run():
-        info = check_for_update()
+        info = check_for_update(
+            enabled=enabled,
+            skipped_version=skipped_version,
+            last_check_at=last_check_at,
+        )
         if info:
             try:
                 on_update_available(info)

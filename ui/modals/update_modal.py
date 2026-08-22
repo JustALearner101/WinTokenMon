@@ -15,9 +15,17 @@ from core.updater import download_and_verify_update, launch_installer
 
 
 class UpdateAvailableModal:
-    def __init__(self, parent, info: dict, current_version: str, on_install_started: Callable):
+    def __init__(
+        self,
+        parent,
+        info: dict,
+        current_version: str,
+        on_install_started: Callable,
+        on_skip: Callable[[], None] | None = None,
+    ):
         self.info = info
         self.on_install_started = on_install_started
+        self.on_skip = on_skip
         self._downloading = False
 
         self.win = ctk.CTkToplevel(parent)
@@ -55,11 +63,23 @@ class UpdateAvailableModal:
         buttons.pack(fill="x", padx=16, pady=(0, 16))
         buttons.columnconfigure(0, weight=1)
         buttons.columnconfigure(1, weight=1)
+        buttons.columnconfigure(2, weight=1)
 
         self.btn_later = ctk.CTkButton(
             buttons, text="Remind Me Later", command=self.win.destroy, height=36
         )
         self.btn_later.grid(row=0, column=0, padx=(0, 4), sticky="ew")
+
+        if self.on_skip:
+            self.btn_skip = ctk.CTkButton(
+                buttons,
+                text=f"Skip {info['version']}",
+                fg_color="#313244",
+                hover_color="#45475A",
+                height=36,
+                command=self._skip_version,
+            )
+            self.btn_skip.grid(row=0, column=1, padx=4, sticky="ew")
 
         self.btn_install = ctk.CTkButton(
             buttons,
@@ -69,7 +89,18 @@ class UpdateAvailableModal:
             height=36,
             command=self._start_download,
         )
-        self.btn_install.grid(row=0, column=1, padx=(4, 0), sticky="ew")
+        self.btn_install.grid(
+            row=0, column=2 if self.on_skip else 1, padx=(4, 0), sticky="ew"
+        )
+
+    def _skip_version(self):
+        """Persists the skipped version so this release is not offered again."""
+        try:
+            if self.on_skip:
+                self.on_skip()
+        except Exception:
+            pass
+        self.win.destroy()
 
     def _start_download(self):
         if self._downloading:

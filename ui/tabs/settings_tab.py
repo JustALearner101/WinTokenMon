@@ -150,6 +150,21 @@ class SettingsTabView:
             self.switch_autostart.deselect()
         self.switch_autostart.pack(side="left")
 
+        # Auto-Update Check Switch Row
+        update_row = ctk.CTkFrame(pet_card, fg_color="transparent")
+        update_row.pack(fill="x", padx=14, pady=(0, 10))
+
+        self.switch_auto_update = ctk.CTkSwitch(
+            update_row,
+            text="🔄 Automatic Update Checks (once a day)",
+            command=self.action_toggle_auto_update,
+        )
+        if getattr(self.store, "auto_check_updates_enabled", True):
+            self.switch_auto_update.select()
+        else:
+            self.switch_auto_update.deselect()
+        self.switch_auto_update.pack(side="left")
+
         # Audio Section
         sound_card = ctk.CTkFrame(frame, corner_radius=10)
         sound_card.pack(fill="x", padx=6, pady=(0, 10))
@@ -478,3 +493,11 @@ class SettingsTabView:
                 bg_color="#E74C3C",
                 text_color="#FFF",
             )
+
+    def action_toggle_auto_update(self):
+        self.store.auto_check_updates_enabled = bool(self.switch_auto_update.get())
+        self.store.save()
+        state_str = (
+            "Enabled (checks once a day)" if self.store.auto_check_updates_enabled else "Disabled"
+        )
+        self.dashboard.show_toast(f"🔄 Automatic Update Checks: {state_str}")

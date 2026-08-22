@@ -122,3 +122,33 @@ def test_non_object_root_uses_defaults(isolated_store, tmp_path):
     store = CompanionStore()
     assert store.active is None
     assert store.spendable_tokens == 0
+
+
+def test_update_preferences_roundtrip_and_defaults(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.companion_store.STATE_FILE", str(tmp_path / "state.json"))
+
+    # Defaults per RFC v1.0.0 §4: auto-check on, nothing skipped, never checked
+    fresh = CompanionStore()
+    assert fresh.auto_check_updates_enabled is True
+    assert fresh.skipped_update_version == ""
+    assert fresh.last_update_check_time == 0.0
+
+    fresh.skipped_update_version = "1.0.1"
+    fresh.last_update_check_time = 1_800_000_000.0
+    fresh.save()
+
+    reloaded = CompanionStore()
+    assert reloaded.auto_check_updates_enabled is True
+    assert reloaded.skipped_update_version == "1.0.1"
+    assert reloaded.last_update_check_time == 1_800_000_000.0
+
+
+def test_auto_check_updates_disabled_persists(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.companion_store.STATE_FILE", str(tmp_path / "state.json"))
+
+    store = CompanionStore()
+    store.auto_check_updates_enabled = False
+    store.save()
+
+    reloaded = CompanionStore()
+    assert reloaded.auto_check_updates_enabled is False

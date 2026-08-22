@@ -2,11 +2,21 @@
 Unit tests for the GitHub Releases auto-update engine (core/updater.py).
 """
 
+import hashlib
 from unittest.mock import patch
 
 import pytest
 
 from core import __version__, updater
+
+
+@pytest.fixture
+def reset_updater_state():
+    with updater._state_lock:
+        updater._last_failed_at = None
+    yield
+    with updater._state_lock:
+        updater._last_failed_at = None
 
 
 class TestVersionParsing:
@@ -29,17 +39,6 @@ class TestVersionParsing:
         assert updater.parse_version(__version__) >= (1, 0)
 
 
-@pytest.fixture
-def reset_updater_state():
-    with updater._state_lock:
-        updater._last_check_at = None
-        updater._last_failed_at = None
-    yield
-    with updater._state_lock:
-        updater._last_check_at = None
-        updater._last_failed_at = None
-
-
 def _release_payload(tag: str, assets: list[dict] | None = None) -> dict:
     return {
         "tag_name": tag,
@@ -50,10 +49,7 @@ def _release_payload(tag: str, assets: list[dict] | None = None) -> dict:
 
 
 def _setup_asset(name: str) -> dict:
-    return {
-        "name": name,
-        "browser_download_url": f"https://example.com/{name}",
-    }
+    return {"name": name, "browser_download_url": f"https://example.com/{name}"}
 
 
 class TestCheckForUpdate:
@@ -61,7 +57,9 @@ class TestCheckForUpdate:
         setup = _setup_asset("WinTokenMon-Setup-v1.0.1.exe")
         checksum = _setup_asset("WinTokenMon-Setup-v1.0.1.exe.sha256")
         with patch.object(
-            updater, "fetch_latest_release", return_value=_release_payload("v1.0.1", [setup, checksum])
+            updater,
+            "fetch_latest_release",
+            return_value=_release_payload("v1.0.1", [setup, checksum]),
         ):
             info = updater.check_for_update(force=True)
         assert info is not None
@@ -91,20 +89,66 @@ class TestCheckForUpdate:
             info = updater.check_for_update(force=True)
         assert info is not None  # portable exe still counts as installer asset fallback
 
-    def test_daily_cooldown_skips_network(self, reset_updater_state):
+    def test_disabled_returns_none_without_network(self, reset_updater_state):
         calls = {"n": 0}
 
         def fake_fetch():
             calls["n"] += 1
-            return _release_payload("v99.0.0", [_setup_asset("WinTokenMon-Setup-v99.0.0.exe")])
+            return _release_payload("v99.0.0")
 
         with patch.object(updater, "fetch_latest_release", side_effect=fake_fetch):
-            first = updater.check_for_update()
-            second = updater.check_for_update()
+            result = updater.check_for_update(enabled=False, force=False)
+        assert result is None
+        assert calls["n"] == 0
+
+    def test_force_bypasses_disabled_toggle(self, reset_updater_state):
+        with patch.object(
+            updater,
+            "fetch_latest_release",
+            return_value=_release_payload(
+                "v99.0.0", [_setup_asset("WinTokenMon-Setup-v99.0.0.exe")]
+            ),
+        ):
+            info = updater.check_for_update(enabled=False, force=True)
+        assert info is not None
+
+    def test_persisted_daily_cooldown_skips_network(self, reset_updater_state):
+        """The daily cadence must survive restarts via the persisted timestamp."""
+        calls = {"n": 0}
+
+        def fake_fetch():
+            calls["n"] += 1
+            return _release_payload(
+                "v99.0.0", [_setup_asset("WinTokenMon-Setup-v99.0.0.exe")]
+            )
+
+        now = 1_800_000_000.0
+        with patch.object(updater, "fetch_latest_release", side_effect=fake_fetch):
+            first = updater.check_for_update(last_check_at=0.0, now=now)
+            second = updater.check_for_update(last_check_at=now - 3600.0, now=now)
 
         assert first is not None
-        assert second is None  # within 24h window: no second check
+        assert second is None  # checked <24h ago (persisted): no network call
         assert calls["n"] == 1
+
+    def test_cooldown_expires_after_interval(self, reset_updater_state):
+        calls = {"n": 0}
+
+        def fake_fetch():
+            calls["n"] += 1
+            return _release_payload(
+                "v99.0.0", [_setup_asset("WinTokenMon-Setup-v99.0.0.exe")]
+            )
+
+        now = 1_800_000_000.0
+        with patch.object(updater, "fetch_latest_release", side_effect=fake_fetch):
+            first = updater.check_for_update(last_check_at=0.0, now=now)
+            # Next launch after >24h: persisted timestamp from the first check
+            later = updater.check_for_update(last_check_at=now, now=now + updater.CHECK_INTERVAL_S + 1)
+
+        assert first is not None
+        assert later is not None
+        assert calls["n"] == 2
 
     def test_failure_cooldown_skips_network(self, reset_updater_state):
         calls = {"n": 0}
@@ -118,6 +162,27 @@ class TestCheckForUpdate:
             assert updater.check_for_update() is None
 
         assert calls["n"] == 1  # failure recorded; retry blocked by cooldown
+
+
+class TestSkippedVersion:
+    def test_skipped_version_not_offered(self, reset_updater_state):
+        setup = _setup_asset("WinTokenMon-Setup-v2.0.0.exe")
+        with patch.object(
+            updater,
+            "fetch_latest_release",
+            return_value=_release_payload("v2.0.0", [setup]),
+        ):
+            assert updater.check_for_update(skipped_version="2.0.0", force=True) is None
+
+    def test_newer_than_skipped_still_offered(self, reset_updater_state):
+        setup = _setup_asset("WinTokenMon-Setup-v2.1.0.exe")
+        with patch.object(
+            updater,
+            "fetch_latest_release",
+            return_value=_release_payload("v2.1.0", [setup]),
+        ):
+            info = updater.check_for_update(skipped_version="2.0.0", force=True)
+        assert info is not None and info["version"] == "2.1.0"
 
 
 class TestAssetSelection:
@@ -138,8 +203,6 @@ class TestChecksumVerification:
         target = tmp_path / "installer.exe"
         payload = b"fake installer bytes"
         target.write_bytes(payload)
-
-        import hashlib
 
         expected = hashlib.sha256(payload).hexdigest().upper()
         assert updater.verify_sha256(str(target), expected)

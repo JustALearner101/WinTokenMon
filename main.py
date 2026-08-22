@@ -122,8 +122,17 @@ class WinTokenMonApp:
             self.request_scan()
             self.pet.root.after(250, self._pump_scan_results)
 
-            # Daily (cooldown-aware) auto-update check in the background
-            start_background_check(self._on_update_available)
+            # Daily (cooldown-aware) auto-update check in the background;
+            # preferences & last-check timestamp persist via state.json
+            start_background_check(
+                self._on_update_available,
+                enabled=self.store.auto_check_updates_enabled,
+                skipped_version=self.store.skipped_update_version,
+                last_check_at=self.store.last_update_check_time,
+            )
+            if self.store.auto_check_updates_enabled:
+                self.store.last_update_check_time = time.time()
+                self.store.save()
 
             # Surface Tk mainloop exceptions to the log file instead of stderr void
             self.pet.root.report_callback_exception = self._on_tk_exception
@@ -297,11 +306,16 @@ class WinTokenMonApp:
         try:
             from ui.modals.update_modal import UpdateAvailableModal
 
+            def _skip_version():
+                self.store.skipped_update_version = info["version"]
+                self.store.save()
+
             UpdateAvailableModal(
                 self.pet.root,
                 info,
                 __version__,
                 on_install_started=self.exit_app,
+                on_skip=_skip_version,
             )
         except Exception as exc:
             log_error(f"update dialog failed: {exc}")

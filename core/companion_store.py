@@ -56,6 +56,10 @@ _SIMPLE_FIELDS = {
     "hud_position": None,
     "hud_opacity": 90,
     "starter_chosen": False,
+    # Auto-update preferences (RFC v1.0.0 §4)
+    "auto_check_updates_enabled": True,
+    "skipped_update_version": "",
+    "last_update_check_time": 0.0,
 }
 
 # Backward-compatible migration from legacy PokeTokenBar directory
@@ -154,6 +158,11 @@ class CompanionStore:
         self.purchased_egg_tiers: list[str] = []
         self.total_hatches: int = 0
         self.on_achievement_callbacks = []
+
+        # Auto-update preferences (persisted via _SIMPLE_FIELDS)
+        self.auto_check_updates_enabled: bool = True
+        self.skipped_update_version: str = ""
+        self.last_update_check_time: float = 0.0
 
         self.load()
 
