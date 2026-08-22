@@ -170,7 +170,7 @@ uv run python scripts/build_exe.py
 ```
 
 ### Output Target:
-- 🚀 **`dist/WinTokenMon-v0.1.0-beta-Portable.exe`** (~28.9 MB)
+- 🚀 **`dist/WinTokenMon-v<version>-Portable.exe`** (~28.9 MB)
 
 You can copy this file to any USB drive or folder and run it directly without installing!
 
@@ -193,17 +193,18 @@ uv run python scripts/build_installer.py
 ### What this script does automatically:
 1. Compiles the latest standalone executable using PyInstaller.
 2. Automatically resolves `ISCC.exe` from standard Windows paths (`Program Files` or `%LOCALAPPDATA%`).
-3. Compiles `installer.iss` and embeds license agreements, desktop icons, and uninstall prompt scripts.
+3. Injects the live version from `core.__version__` into the Inno Setup script (`/DMyAppVersion`) and **refuses to compile** if the version-matched portable executable is missing — stale binaries can never be packaged.
+4. Compiles `installer.iss` and embeds license agreements, desktop icons, and uninstall prompt scripts.
 
 ### Output Target:
-- 📦 **`dist/WinTokenMon-Setup-v0.1.0-beta.exe`** (~30.6 MB)
+- 📦 **`dist/WinTokenMon-Setup-v<version>.exe`** (~30 MB)
 
 ---
 
 ## 8. 🧹 Testing the Installer & Uninstaller
 
 ### Testing the Installation:
-1. Double-click `dist/WinTokenMon-Setup-v0.1.0-beta.exe`.
+1. Double-click `dist/WinTokenMon-Setup-v<version>.exe`.
 2. Test the **Browse...** button to install to a custom folder (e.g. `D:\TestWinTokenMon`).
 3. Check the **Desktop Shortcut** and **Start on Windows Boot** checkboxes.
 4. Finish installation and verify that the app launches and floats on your desktop.

@@ -8,24 +8,30 @@ This document outlines the roadmap overview. For detailed, production-grade arch
 
 ## 🧭 Milestone Overview
 
+> ✅ **Status update (2026-08-22)**: v1.0.0 Production GA is **live** — all four milestones below have shipped. The sections that follow are kept as historical design references; the only forward-looking item is the Far-Future Battle RFC.
+
 ```mermaid
 timeline
     title WinTokenMon Development Roadmap
-    section Public Beta (Current)
+    section Public Beta
         v0.1.0-beta : Multi-Provider Token Readers : Shimeji Floating Pet : Walking Gait & Hop Physics : Audio Cries & Chiptune : Pokédex & Shop
-    section Milestone 1
+    section Milestone 1 ✅
         v0.2.0 : Developer Achievements & Badges : Night Owl & Overclock Alerts : Pokédex Trophy Cabinet
-    section Milestone 2
+    section Milestone 2 ✅
         v0.3.0 : Interactive Feeding on Desktop : Treat Drop Physics & Eating : Friendship Heart Affection Meter
-    section Milestone 3
+    section Milestone 3 ✅
         v0.4.0 : Compact HUD Floating Pill : Taskbar Live Progress Bar : Extended AI Providers (Aider, Windsurf, Cline)
-    section Production Release
-        v1.0.0 : Standalone Release Validation : Winget Package Repository Publish : Auto-Update Support
+    section Production Release ✅ Live
+        v1.0.0 : Standalone Release Published : Winget Submission in Review : Auto-Update Engine Shipped
+    section Next Up
+        v1.0.x : Patch Releases via Auto-Updater : SmartScreen Reputation Building
+    section Far Future
+        Battle RFC : EV/IV Stat Engine : Turn-Based Arena : PvE & Local LAN
 ```
 
 ---
 
-## 🏆 1. Developer Achievements & Badges System (`v0.2.0`)
+## 🏆 1. Developer Achievements & Badges System (`v0.2.0`) — ✅ SHIPPED
 > 📑 **Detailed RFC Plan**: [**`docs/plans/v0.2.0-developer-achievements-and-badges.md`**](plans/v0.2.0-developer-achievements-and-badges.md)
 
 ### Overview
@@ -62,7 +68,7 @@ class Achievement:
 
 ---
 
-## 🎈 2. Interactive Desktop Minigames & Direct Feeding (`v0.3.0`)
+## 🎈 2. Interactive Desktop Minigames & Direct Feeding (`v0.3.0`) — ✅ SHIPPED
 > 📑 **Detailed RFC Plan**: [**`docs/plans/v0.3.0-interactive-feeding-and-friendship.md`**](plans/v0.3.0-interactive-feeding-and-friendship.md)
 
 ### Overview
@@ -89,7 +95,7 @@ flowchart LR
 
 ---
 
-## 📊 3. Ultra-Compact Floating HUD & Extended AI Providers (`v0.4.0`)
+## 📊 3. Ultra-Compact Floating HUD & Extended AI Providers (`v0.4.0`) — ✅ SHIPPED
 > 📑 **Detailed RFC Plan**: [**`docs/plans/v0.4.0-extended-ai-scanners-and-compact-hud.md`**](plans/v0.4.0-extended-ai-scanners-and-compact-hud.md)
 
 ### Overview
@@ -112,7 +118,7 @@ For power users who prefer minimal screen clutter while keeping an eye on live t
 
 ---
 
-## 📦 4. Production Release & Distribution (`v1.0.0`)
+## 📦 4. Production Release & Distribution (`v1.0.0`) — ✅ LIVE
 > 📑 **Detailed RFC Plan**: [**`docs/plans/v1.0.0-production-release-and-winget.md`**](plans/v1.0.0-production-release-and-winget.md)
 
 1. **Automated Release Validation**:

@@ -75,13 +75,17 @@
 ### 8. 📟 Compact HUD Capsule Mode
 - **Minimal 220×32px Always-On-Top Pill**: Live token burn vs daily limit (%), burn velocity (tokens/min), and hatch/evolution progress — switchable instantly from the tray menu.
 
+### 9. 🔄 Automatic Updates
+- **Once-a-day background check** against GitHub Releases (toggleable in Settings, with *Skip This Version* option).
+- One-click **Download & Install**: the new installer is downloaded to `%TEMP%` and **SHA256-verified before execution** — your save game at `%APPDATA%\WinTokenMon` is never touched.
+
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Windows 10 or Windows 11 (64-bit)
-- Python 3.10, 3.11, 3.12, or 3.14+
+- Python 3.10+ only needed for **Option C (run from source)**
 
 > ### 🛡️ Windows SmartScreen Notice
 > When first running the installer or the portable `.exe`, Windows may show
@@ -90,22 +94,36 @@
 > SHA256 checksums are published on every [release](https://github.com/JustALearner101/WinTokenMon/releases).
 > To proceed, click **`More info` → `Run anyway`**.
 
-### Installation & Launch
+### Option A — Download the Installer or Portable Build (Recommended)
+1. Head to the [**Releases**](https://github.com/JustALearner101/WinTokenMon/releases) page.
+2. Grab either:
+   - **`WinTokenMon-Setup-v1.0.0.exe`** — interactive installer with desktop icon & autostart options, or
+   - **`WinTokenMon-v1.0.0-Portable.exe`** — single-file portable build, no installation needed.
+3. Verify the SHA256 checksum if you want to be extra careful (`.sha256` files are attached to every release).
+4. Launch it — done! The app checks for updates automatically once a day.
+
+### Option B — Install via Winget *(coming soon)*
+```
+winget install JustALearner101.WinTokenMon
+```
+The manifest is under review at [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs) — this command will start working once merged.
+
+### Option C — Run from Source (Developers)
 
 1. **Clone the repository**:
    ```powershell
-   git clone https://github.com/YourUsername/WinTokenMon.git
+   git clone https://github.com/JustALearner101/WinTokenMon.git
    cd WinTokenMon
    ```
 
-2. **Run (Option A: Instant with `uv` — Recommended)**:
+2. **Run (Instant with `uv` — Recommended)**:
    ```powershell
    # Sync virtualenv and dependencies automatically
    uv sync
    uv run main.py
    ```
 
-3. **Run (Option B: Traditional with `pip`)**:
+3. **Run (Traditional with `pip`)**:
    ```powershell
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1

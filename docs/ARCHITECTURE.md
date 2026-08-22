@@ -20,32 +20,40 @@ flowchart TD
     end
 
     subgraph "Core Ingestion & Game Engine"
-        TR["WindowsTokenReader<br/>(core/token_reader.py)<br/>• Incremental Tail Scanning (seek_pos)<br/>• O(1) Stat Cache"]
-        CS["CompanionStore<br/>(core/companion_store.py)<br/>• State Persistence (%APPDATA%/WinTokenMon/state.json)<br/>• O(1) SPECIES_INDEX Lookups<br/>• Throttled Disk Save Engine<br/>• Dynamic Pokédex & Catch Log<br/>• Evolution & Level Mechanics"]
-        AM["AudioManager<br/>(core/audio_manager.py)<br/>• Threaded Pygame Mixer<br/>• PokeAPI Cry Cache<br/>• 8-bit Levelup Synth"]
+        TR["WindowsTokenReader<br/>(core/token_reader.py)<br/>• Incremental Tail Scanning (seek_pos)<br/>• O(1) Stat Cache (thread-safe)<br/>• Cache Eviction & Caps"]
+        CS["CompanionStore<br/>(core/companion_store.py)<br/>• Atomic Save (.tmp + os.replace) + .bak<br/>• Corrupt-State Quarantine & Recovery<br/>• Loaded-Value Clamping<br/>• O(1) SPECIES_INDEX Lookups<br/>• Evolution & Level Mechanics"]
+        AM["AudioManager<br/>(core/audio_manager.py)<br/>• Lazy Mixer Init & Synth Caching<br/>• Threaded Playback<br/>• PokeAPI Cry Cache + Cooldown"]
         AE["AnimationEngine<br/>(core/animation_engine.py)<br/>• Damped Sine Bounce<br/>• Floating Emoji Easing<br/>• White Flash & Sparkles<br/>• Egg Wobble Oscillation"]
     end
 
+    subgraph "Platform Services"
+        UP["UpdateChecker<br/>(core/updater.py)<br/>• 24h Cooldown-Aware Release Check<br/>• SHA256-Verified Installer Download<br/>• Persisted Prefs via state.json"]
+        LOG["AppLog<br/>(core/applog.py)<br/>• APPDATA Log File w/ Rotation<br/>• log_once Anti-Spam Helper"]
+        AS["AutostartManager<br/>(core/autostart.py)<br/>• HKCU Run Key Registry"]
+    end
+
     subgraph "Presentation Layer"
-        APP["WinTokenMonApp (main.py)<br/>• Polling Loop (10s timer)<br/>• @tk_safe Error Boundary<br/>• Main Thread Tkinter Loop"]
-        PET["DesktopPetWindow<br/>(ui/desktop_pet.py)<br/>• Frameless Transparent Tkinter<br/>• Drag vs Click Detection<br/>• Sleep Mode & Burn Badge<br/>• Animated Sprite Renderer"]
+        APP["WinTokenMonApp (main.py)<br/>• Scanner Worker Thread + UI Queue Pump<br/>• @tk_safe Error Boundary<br/>• Main Thread Tkinter Loop"]
+        PET["DesktopPetWindow<br/>(ui/desktop_pet.py)<br/>• Frameless Transparent Tkinter<br/>• Change-Detection Frame Skipping<br/>• Sleep Mode & Burn Badge<br/>• Animated Sprite Renderer"]
         STARTER["StarterSelectionModal<br/>(ui/starter_modal.py)<br/>• Gen 1-9 Grid Selector<br/>• Animated Preview & Type Tags"]
         TRAY["SystemTrayManager<br/>(ui/system_tray.py)<br/>• Pystray Background Thread<br/>• Windows Native Toasts"]
-        
+
         subgraph "Modular Dashboard (ui/)"
             DASH["DashboardWindow (ui/dashboard.py)<br/>• Coordinator & Lazy Tabview<br/>• In-Memory Sprite Cache<br/>• Animated Toast System"]
             THEME["Theme & Lore (ui/dashboard_theme.py)<br/>• TYPE_THEMES & POKEMON_LORE"]
-            
+
             subgraph "Tabs (ui/tabs/)"
                 T_HOME["HomeTabView (home_tab.py)<br/>• Companion EXP & 7-Day Chart"]
                 T_DEX["PokedexTabView (pokedex_tab.py)<br/>• Pokédex Grid & Catch Log Dual-View"]
                 T_SHOP["ShopTabView (shop_tab.py)<br/>• Incubator Hub & Bag Items"]
-                T_SET["SettingsTabView (settings_tab.py)<br/>• Limit Alerts & Pet Presets"]
+                T_SET["SettingsTabView (settings_tab.py)<br/>• Limit Alerts, Providers & Update Toggle"]
             end
-            
+
             subgraph "Modals (ui/modals/)"
                 M_NAT["NatureSelectorModal (nature_modal.py)"]
                 M_INSP["PokedexInspectorModal (pokedex_inspector_modal.py)"]
+                M_EVO["EvolutionModal (evolution_modal.py)"]
+                M_UPD["UpdateAvailableModal (update_modal.py)"]
             end
         end
     end
@@ -60,8 +68,13 @@ flowchart TD
     CS -->|Threshold Alerts| TRAY
     PET -->|Ceremony & Click SFX| AM
     PET -->|Visual Feedback| AE
+    APP -->|daily background check| UP
+    UP -->|update available| APP
+    UP -->|read/write update prefs| CS
+    UP -.->|GitHub Releases API| GH[("api.github.com")]
+    AM & TR & UP -.->|sprite/cry fetches| NET[("raw.githubusercontent.com")]
     DASH --> T_HOME & T_DEX & T_SHOP & T_SET
-    DASH --> M_NAT & M_INSP
+    DASH --> M_NAT & M_INSP & M_EVO & M_UPD
     T_HOME & T_DEX --> THEME
 ```
 
@@ -135,21 +148,24 @@ flowchart TD
   - **`pokedex_tab.py`**: Reference-style dynamic Pokédex grid, dual-mode Catch Log switcher, empty-state mascots, live search, and rarity filtering.
   - **`shop_tab.py`**: Spendable token currency, egg incubator adoption, Rare Candies, Nature Mints, and Shiny Charms.
   - **`settings_tab.py`**: Daily token budget limits with toast alerts, pet size presets, opacity slider, audio toggles, and autonomous roaming controls.
-- **Modal Controllers (`ui/modals/`)**:
-  - **`nature_modal.py`**: Interactive 20-personality Nature Mint selector.
-  - **`pokedex_inspector_modal.py`**: Detailed Pokémon inspector displaying cry sound playback, bio lore, evolution lines, and the "Set as Active Companion" trigger.
+  - **Modal Controllers (`ui/modals/`)**:
+    - **`nature_modal.py`**: Interactive 20-personality Nature Mint selector.
+    - **`pokedex_inspector_modal.py`**: Detailed Pokémon inspector displaying cry sound playback, bio lore, evolution lines, and the "Set as Active Companion" trigger.
+    - **`evolution_modal.py`**: Cinematic Game-Boy-style morph animation with particle bursts, silhouette flashing, and cry fanfares.
+    - **`update_modal.py`**: Update-available dialog with changelog preview, one-click SHA256-verified download, and *Skip This Version*.
 
 ---
 
 ### F. Configuration Layering & Environment Architecture
 WinTokenMon uses a two-tier configuration model to separate persistent user state from developer testing:
 1. **Production / User State (`%APPDATA%/WinTokenMon/state.json`)**:
-   - Single source of truth for companion levels, inventory items, Pokédex captures, and user preferences.
+   - Single source of truth for companion levels, inventory items, Pokédex captures, update preferences, and user settings.
+   - **Atomic writes** (`state.json.tmp` → `os.replace`) with a rolling `.bak` of the last known-good state.
+   - Corrupt files are quarantined as `state.corrupt-<timestamp>.json` and the loader falls back to the backup — a crash can never wipe progression.
    - Preserved across app restarts and installer upgrades.
-2. **Developer Environment Flags (`.env` via `python-dotenv`)**:
-   - Optional overrides loaded at startup during local development.
+2. **Developer Environment Flags (real environment variables)**:
    - `WINTOKENMON_DEBUG`: Enables verbose debug output to stdout/stderr.
-   - `WINTOKENMON_POLL_INTERVAL`: Overrides background polling cycle frequency.
+   - `WINTOKENMON_POLL_INTERVAL`: Overrides background scanning cycle frequency.
 
 ---
 
@@ -157,18 +173,27 @@ WinTokenMon uses a two-tier configuration model to separate persistent user stat
 - **PEP 621 Standard**: All package metadata, runtime dependencies, optional dev dependencies, and tool settings are centralized in [`pyproject.toml`](../pyproject.toml).
 - **Fast Environment Management with `uv`**: Uses Astral's `uv` for reproducible, lightning-fast virtual environments and lockfile generation (`uv.lock`).
 - **Zero-Friction Code Quality with `Ruff`**: Fast Rust-based linter and code formatter configured to eliminate bugs and enforce clean import sorting.
-- **Windows Standalone Packaging**: Standalone single-file executables bundled via PyInstaller (`WinTokenMon-v0.1.0-beta-Portable.spec`) and system installer via Inno Setup (`installer.iss`).
+- **Windows Standalone Packaging**: Standalone single-file executables bundled via PyInstaller and system installer via Inno Setup (`installer.iss`). The installer version is injected at compile time (`/DMyAppVersion=<core.__version__>`) so the wizard can never package a stale binary; CI additionally publishes SHA256 checksums for every release artifact.
+
+---
+
+### H. Auto-Updater & Observability Subsystem ([`core/updater.py`](../core/updater.py), [`core/applog.py`](../core/applog.py))
+- **UpdateChecker (`core/updater.py`)**:
+  - Queries the GitHub Releases API on a daemon worker thread — never blocks the UI loop.
+  - Daily cadence enforced via `last_update_check_time` persisted in `state.json`; network failures enter a short session retry cooldown.
+  - Honors two user preferences also persisted in state: `auto_check_updates_enabled` and `skipped_update_version`.
+  - Downloads the Inno Setup installer to `%TEMP%`, verifies its SHA256 against the published checksum before launching it silently.
+- **AppLog (`core/applog.py`)**:
+  - File logger at `%APPDATA%/WinTokenMon/logs/wintokenmon.log` with size-based rotation.
+  - `log_once(key, msg)` helper records recurring background failures exactly once per session to keep the log readable.
+- **Wiring (`main.py`)**: scanner results and updater events are marshalled to the Tk main thread through small queues; all UI mutations stay on one thread while disk/network I/O lives on daemons.
 
 ---
 
 ## 3. Extensibility & Future Architecture
 
-For full architectural designs of upcoming features including:
-- **Developer Achievements Engine**
-- **Desktop Minigames & Direct Feeding Subsystem**
-- **Compact HUD Floating Pill Mode**
-- **Extended AI Tool Scanners (Aider, Windsurf, Cline)**
+The v0.2.0–v1.0.0 roadmap (Achievements Engine, Interactive Feeding, Compact HUD, Extended Scanners, Auto-Updater) has been fully implemented and is documented in the subsystems above.
 
-Please see the [Future Works & Roadmap Blueprint](FUTURE-WORKS.md).
+For exploratory designs of far-future features — most notably the **Retro Battle Arena & Stat Engine RFC** (EV/IV stats, damage formulas, PvE/local-LAN battles) — please see the [Future Works & Roadmap Blueprint](FUTURE-WORKS.md).
 
 For known platform boundaries and technical workarounds regarding Windows Tkinter transparency, multi-monitor DPI, and exclusive fullscreen apps, please consult [Known Limitations & Platform Quirks](KNOWN-LIMITATIONS.md).

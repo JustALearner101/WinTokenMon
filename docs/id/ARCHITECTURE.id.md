@@ -20,32 +20,40 @@ flowchart TD
     end
 
     subgraph "Ingesti Utama & Game Engine"
-        TR["WindowsTokenReader<br/>(core/token_reader.py)<br/>• Pemindaian Ekor Inkremental (seek_pos)<br/>• Cache Status O(1)"]
-        CS["CompanionStore<br/>(core/companion_store.py)<br/>• Persistensi Status (%APPDATA%/WinTokenMon/state.json)<br/>• Lookup SPECIES_INDEX O(1)<br/>• Throttling Penyimpanan Disk<br/>• Pokédex & Catch Log Dinamis<br/>• Mekanik Level & Evolusi"]
-        AM["AudioManager<br/>(core/audio_manager.py)<br/>• Pygame Mixer Terpisah<br/>• Cache Cry PokéAPI<br/>• Synth Levelup 8-bit"]
+        TR["WindowsTokenReader<br/>(core/token_reader.py)<br/>• Pemindaian Ekor Inkremental (seek_pos)<br/>• Cache Status O(1) (thread-safe)<br/>• Eviction Cache & Batas Ukuran"]
+        CS["CompanionStore<br/>(core/companion_store.py)<br/>• Simpan Atomik (.tmp + os.replace) + .bak<br/>• Karantina & Pemulihan State Korup<br/>• Clamping Nilai Saat Load<br/>• Lookup SPECIES_INDEX O(1)<br/>• Mekanik Level & Evolusi"]
+        AM["AudioManager<br/>(core/audio_manager.py)<br/>• Init Mixer Lazy & Cache Synth<br/>• Playback Terpisah Thread<br/>• Cache Cry PokéAPI + Cooldown"]
         AE["AnimationEngine<br/>(core/animation_engine.py)<br/>• Pantulan Sinus Teredam<br/>• Easing Emoji Mengambang<br/>• Kilatan Putih & Sparkle<br/>• Goyangan Telur"]
     end
 
+    subgraph "Layanan Platform"
+        UP["UpdateChecker<br/>(core/updater.py)<br/>• Cek Rilis Harian Cooldown-Aware<br/>• Unduh Installer Verifikasi SHA256<br/>• Preferensi Persisten via state.json"]
+        LOG["AppLog<br/>(core/applog.py)<br/>• File Log APPDATA w/ Rotasi<br/>• Helper log_once Anti-Spam"]
+        AS["AutostartManager<br/>(core/autostart.py)<br/>• Registry HKCU Run Key"]
+    end
+
     subgraph "Lapisan Presentasi"
-        APP["WinTokenMonApp (main.py)<br/>• Polling Loop (interval 10d)<br/>• @tk_safe Error Boundary<br/>• Main Thread Tkinter"]
-        PET["DesktopPetWindow<br/>(ui/desktop_pet.py)<br/>• Tkinter Transparan Tanpa Frame<br/>• Deteksi Drag vs Klik<br/>• Mode Tidur & Badge Burn<br/>• Renderer Sprite Bergerak"]
+        APP["WinTokenMonApp (main.py)<br/>• Worker Thread Scanner + Queue Pump UI<br/>• @tk_safe Error Boundary<br/>• Main Thread Tkinter"]
+        PET["DesktopPetWindow<br/>(ui/desktop_pet.py)<br/>• Tkinter Transparan Tanpa Frame<br/>• Skip Frame Berbasis Deteksi Perubahan<br/>• Mode Tidur & Badge Burn<br/>• Renderer Sprite Bergerak"]
         STARTER["StarterSelectionModal<br/>(ui/starter_modal.py)<br/>• Grid Selector Gen 1-9 & Preview Animasi"]
         TRAY["SystemTrayManager<br/>(ui/system_tray.py)<br/>• Background Thread Pystray<br/>• Notifikasi Windows Toast"]
-        
+
         subgraph "Dashboard Modular (ui/)"
             DASH["DashboardWindow (ui/dashboard.py)<br/>• Koordinator & Lazy Tabview<br/>• Cache Sprite In-Memory<br/>• Sistem Toast Animasi"]
             THEME["Tema & Lore (ui/dashboard_theme.py)<br/>• TYPE_THEMES & POKEMON_LORE"]
-            
+
             subgraph "Tabs (ui/tabs/)"
                 T_HOME["HomeTabView (home_tab.py)<br/>• EXP Companion & Grafik 7 Hari"]
                 T_DEX["PokedexTabView (pokedex_tab.py)<br/>• Grid Pokédex & Dual-View Catch Log"]
                 T_SHOP["ShopTabView (shop_tab.py)<br/>• Inkubator Telur & Item Tas"]
-                T_SET["SettingsTabView (settings_tab.py)<br/>• Peringatan Limit & Preset Pet"]
+                T_SET["SettingsTabView (settings_tab.py)<br/>• Limit, Provider & Toggle Update"]
             end
-            
+
             subgraph "Modals (ui/modals/)"
                 M_NAT["NatureSelectorModal (nature_modal.py)"]
                 M_INSP["PokedexInspectorModal (pokedex_inspector_modal.py)"]
+                M_EVO["EvolutionModal (evolution_modal.py)"]
+                M_UPD["UpdateAvailableModal (update_modal.py)"]
             end
         end
     end
@@ -60,8 +68,13 @@ flowchart TD
     CS -->|Peringatan Ambang Batas| TRAY
     PET -->|SFX Ceremony & Klik| AM
     PET -->|Umpan Balik Visual| AE
+    APP -->|cek harian background| UP
+    UP -->|update tersedia| APP
+    UP -->|baca/tulis preferensi update| CS
+    UP -.->|GitHub Releases API| GH[("api.github.com")]
+    AM & TR & UP -.->|fetch sprite/cry| NET[("raw.githubusercontent.com")]
     DASH --> T_HOME & T_DEX & T_SHOP & T_SET
-    DASH --> M_NAT & M_INSP
+    DASH --> M_NAT & M_INSP & M_EVO & M_UPD
     T_HOME & T_DEX --> THEME
 ```
 
@@ -134,16 +147,20 @@ flowchart TD
 - **Pengendali Modal (`ui/modals/`)**:
   - **`nature_modal.py`**: Dialog interaktif pemilih 20 kepribadian Nature Mint.
   - **`pokedex_inspector_modal.py`**: Detail inspektor spesies Pokémon lengkap dengan audio cry, lore, diagram rantai evolusi, dan tombol pasang pendamping aktif.
+  - **`evolution_modal.py`**: Skenario evolusi sinematik bergaya Game Boy dengan partikel, siluet berkedip, dan fanfare cry.
+  - **`update_modal.py`**: Dialog update tersedia dengan preview changelog, unduh satu-klik terverifikasi SHA256, dan opsi *Skip This Version*.
 
 ---
 
 ### F. Manajemen Konfigurasi & Lingkungan
 1. **Status Pengguna / Produksi (`%APPDATA%/WinTokenMon/state.json`)**:
-   - Sumber kebenaran tunggal untuk progres level, inventori item, koleksi Pokédex, dan preferensi pengguna.
+   - Sumber kebenaran tunggal untuk progres level, inventori item, koleksi Pokédex, preferensi pembaruan, dan pengaturan pengguna.
+   - **Penulisan atomik** (`state.json.tmp` → `os.replace`) dengan cadangan `.bak` dari state valid terakhir.
+   - File korup dikarantina sebagai `state.corrupt-<timestamp>.json` dan loader mundur ke backup — crash tidak pernah bisa menghapus progres.
    - Dipertahankan saat aplikasi restart atau update installer.
-2. **Flag Lingkungan Pengembang (`.env` via `python-dotenv`)**:
+2. **Flag Lingkungan Pengembang (variabel lingkungan sungguhan)**:
    - `WINTOKENMON_DEBUG`: Mengaktifkan output debug verbose.
-   - `WINTOKENMON_POLL_INTERVAL`: Menyesuaikan frekuensi siklus polling background.
+   - `WINTOKENMON_POLL_INTERVAL`: Menyesuaikan frekuensi siklus scanning background.
 
 ---
 
@@ -151,4 +168,17 @@ flowchart TD
 - **Standar PEP 621**: Metadata paket, dependensi runtime, dan konfigurasi alat terpusat di [`pyproject.toml`](../../pyproject.toml).
 - **Manajemen Lingkungan Cepat dengan `uv`**: Lingkungan virtual cepat dan file kunci terstandarisasi (`uv.lock`).
 - **Pembersihan Kode dengan `Ruff`**: Linter Rust super cepat untuk menjaga standar kualitas kode.
-- **Pengemasan Standalone Windows**: Executable mandiri via PyInstaller (`WinTokenMon-v0.1.0-beta-Portable.spec`) dan installer Windows via Inno Setup (`installer.iss`).
+- **Pengemasan Standalone Windows**: Executable mandiri via PyInstaller dan installer Windows via Inno Setup (`installer.iss`). Versi installer di-inject saat compile (`/DMyAppVersion=<core.__version__>`) sehingga wizard tidak mungkin membungkus binary basi; CI juga mempublikasikan checksum SHA256 untuk setiap artefak rilis.
+
+---
+
+### H. Subsistem Auto-Updater & Observabilitas ([`core/updater.py`](../../core/updater.py), [`core/applog.py`](../../core/applog.py))
+- **UpdateChecker (`core/updater.py`)**:
+  - Menanyakan GitHub Releases API di daemon worker thread — tidak pernah memblokir loop UI.
+  - Kadensi harian ditegakkan lewat `last_update_check_time` yang persisten di `state.json`; kegagalan jaringan masuk cooldown retry sesi singkat.
+  - Menghormati dua preferensi pengguna yang juga persisten: `auto_check_updates_enabled` dan `skipped_update_version`.
+  - Mengunduh installer Inno Setup ke `%TEMP%`, memverifikasi SHA256 terhadap checksum resmi sebelum menjalankannya secara silent.
+- **AppLog (`core/applog.py`)**:
+  - File logger di `%APPDATA%/WinTokenMon/logs/wintokenmon.log` dengan rotasi berbasis ukuran.
+  - Helper `log_once(key, msg)` mencatat failure background berulang tepat satu kali per sesi agar log tetap terbaca.
+- **Wiring (`main.py`)**: hasil scanner dan event updater dimarshal ke main thread Tk melalui queue kecil; semua mutasi UI berada di satu thread sementara disk/network I/O hidup di daemon.
