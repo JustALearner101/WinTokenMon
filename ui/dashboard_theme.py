@@ -84,26 +84,106 @@ TYPE_THEMES = {
 }
 
 NATURE_DETAILS = {
-    PokemonNature.ADAMANT: ("+10% Attack / Physical", "-10% Sp. Atk", "🗡️ High-velocity raw prompt tokens"),
-    PokemonNature.MODEST: ("+10% Sp. Atk / Reasoning", "-10% Attack", "🔮 Precision logic & deep reasoning models"),
-    PokemonNature.JOLLY: ("+10% Speed / Cadence", "-10% Sp. Atk", "⚡ Rapid iterative prompt sessions"),
-    PokemonNature.TIMID: ("+10% Speed / Fast Stream", "-10% Attack", "💨 High token streaming throughput"),
-    PokemonNature.BOLD: ("+10% Defense / Bug Resilience", "-10% Attack", "🛡️ Rock-solid unit tests & refactoring"),
-    PokemonNature.CALM: ("+10% Sp. Def / Error Recovery", "-10% Attack", "🧘 Graceful stacktrace debugging"),
-    PokemonNature.BRAVE: ("+10% Attack / Heavy Context", "-10% Speed", "⚔️ Massive multi-file codebase contexts"),
-    PokemonNature.QUIET: ("+10% Sp. Atk / Deep Thinking", "-10% Speed", "🌙 Complex mathematical & algorithmic focus"),
-    PokemonNature.CAREFUL: ("+10% Sp. Def / Clean Arch", "-10% Sp. Atk", "🎯 Strict type-safety and architectural design"),
-    PokemonNature.IMPISH: ("+10% Defense / Zero Bugs", "-10% Sp. Atk", "🛡️ Defensive coding & edge-case guards"),
-    PokemonNature.HARDY: ("Balanced Stats (All-round)", "No stat penalties", "⚖️ Reliable daily coding companion"),
-    PokemonNature.DOCILE: ("Balanced Stats (All-round)", "No stat penalties", "⚖️ Consistent versatile token burn"),
-    PokemonNature.SERIOUS: ("Balanced Stats (All-round)", "No stat penalties", "⚖️ Focused high-productivity sprints"),
-    PokemonNature.BASHFUL: ("Balanced Stats (All-round)", "No stat penalties", "⚖️ Quiet and steady token accumulation"),
-    PokemonNature.QUIRKY: ("Balanced Stats (All-round)", "No stat penalties", "⚖️ Creative multi-agent exploration"),
-    PokemonNature.NAIVE: ("+10% Speed / Quick Prototyping", "-10% Sp. Def", "🎨 Experimental fast MVP prototyping"),
-    PokemonNature.HASTY: ("+10% Speed / Hot Reloads", "-10% Defense", "🚀 Rapid frontend refresh cycles"),
-    PokemonNature.LONELY: ("+10% Attack / Solo Dev", "-10% Defense", "💻 Independent solo project sprints"),
-    PokemonNature.NAUGHTY: ("+10% Attack / Experimental", "-10% Sp. Def", "🧪 Frontier bleeding-edge experimentation"),
-    PokemonNature.MILD: ("+10% Sp. Atk / Code Craft", "-10% Defense", "✨ Elegant clean syntax & formatting"),
+    PokemonNature.ADAMANT: (
+        "+10% Attack / Physical",
+        "-10% Sp. Atk",
+        "🗡️ High-velocity raw prompt tokens",
+    ),
+    PokemonNature.MODEST: (
+        "+10% Sp. Atk / Reasoning",
+        "-10% Attack",
+        "🔮 Precision logic & deep reasoning models",
+    ),
+    PokemonNature.JOLLY: (
+        "+10% Speed / Cadence",
+        "-10% Sp. Atk",
+        "⚡ Rapid iterative prompt sessions",
+    ),
+    PokemonNature.TIMID: (
+        "+10% Speed / Fast Stream",
+        "-10% Attack",
+        "💨 High token streaming throughput",
+    ),
+    PokemonNature.BOLD: (
+        "+10% Defense / Bug Resilience",
+        "-10% Attack",
+        "🛡️ Rock-solid unit tests & refactoring",
+    ),
+    PokemonNature.CALM: (
+        "+10% Sp. Def / Error Recovery",
+        "-10% Attack",
+        "🧘 Graceful stacktrace debugging",
+    ),
+    PokemonNature.BRAVE: (
+        "+10% Attack / Heavy Context",
+        "-10% Speed",
+        "⚔️ Massive multi-file codebase contexts",
+    ),
+    PokemonNature.QUIET: (
+        "+10% Sp. Atk / Deep Thinking",
+        "-10% Speed",
+        "🌙 Complex mathematical & algorithmic focus",
+    ),
+    PokemonNature.CAREFUL: (
+        "+10% Sp. Def / Clean Arch",
+        "-10% Sp. Atk",
+        "🎯 Strict type-safety and architectural design",
+    ),
+    PokemonNature.IMPISH: (
+        "+10% Defense / Zero Bugs",
+        "-10% Sp. Atk",
+        "🛡️ Defensive coding & edge-case guards",
+    ),
+    PokemonNature.HARDY: (
+        "Balanced Stats (All-round)",
+        "No stat penalties",
+        "⚖️ Reliable daily coding companion",
+    ),
+    PokemonNature.DOCILE: (
+        "Balanced Stats (All-round)",
+        "No stat penalties",
+        "⚖️ Consistent versatile token burn",
+    ),
+    PokemonNature.SERIOUS: (
+        "Balanced Stats (All-round)",
+        "No stat penalties",
+        "⚖️ Focused high-productivity sprints",
+    ),
+    PokemonNature.BASHFUL: (
+        "Balanced Stats (All-round)",
+        "No stat penalties",
+        "⚖️ Quiet and steady token accumulation",
+    ),
+    PokemonNature.QUIRKY: (
+        "Balanced Stats (All-round)",
+        "No stat penalties",
+        "⚖️ Creative multi-agent exploration",
+    ),
+    PokemonNature.NAIVE: (
+        "+10% Speed / Quick Prototyping",
+        "-10% Sp. Def",
+        "🎨 Experimental fast MVP prototyping",
+    ),
+    PokemonNature.HASTY: (
+        "+10% Speed / Hot Reloads",
+        "-10% Defense",
+        "🚀 Rapid frontend refresh cycles",
+    ),
+    PokemonNature.LONELY: (
+        "+10% Attack / Solo Dev",
+        "-10% Defense",
+        "💻 Independent solo project sprints",
+    ),
+    PokemonNature.NAUGHTY: (
+        "+10% Attack / Experimental",
+        "-10% Sp. Def",
+        "🧪 Frontier bleeding-edge experimentation",
+    ),
+    PokemonNature.MILD: (
+        "+10% Sp. Atk / Code Craft",
+        "-10% Defense",
+        "✨ Elegant clean syntax & formatting",
+    ),
 }
 
 POKEMON_LORE = {

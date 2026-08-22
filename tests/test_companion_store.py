@@ -170,6 +170,7 @@ class TestCompanionStore(unittest.TestCase):
         self.assertTrue(success)
         self.assertEqual(self.store.active.species_id, 906)
         self.assertEqual(self.store.active.species_name, "Sprigatito")
+
     def test_trainer_rank_and_streak(self):
         """Tests Trainer rank progression and active daily streak calculation."""
         rank, badge, pct = self.store.get_trainer_rank()

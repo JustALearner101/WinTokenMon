@@ -52,10 +52,10 @@ flowchart TD
 
     AG & CL & CR & CX & CP & KM --> TR
     TR -->|Token Usage Summary & Deltas| APP
-    APP -->|add_tokens(delta)| CS
+    APP -->|"add_tokens(delta)"| CS
     APP -->|poll updates| PET & DASH & TRAY
     APP -->|first launch wizard| STARTER
-    STARTER -->|choose_starter(species_id)| CS
+    STARTER -->|"choose_starter(species_id)"| CS
     CS -->|Emit Ceremony Events| PET
     CS -->|Threshold Alerts| TRAY
     PET -->|Ceremony & Click SFX| AM

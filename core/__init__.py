@@ -2,6 +2,6 @@
 WinTokenMon for Windows — Core Package
 """
 
-__version__ = "0.1.0-beta"
-__app_name__ = "WinTokenMon (Beta)"
+__version__ = "1.0.0"
+__app_name__ = "WinTokenMon (Preview)"
 __author__ = "WinTokenMon Contributors"

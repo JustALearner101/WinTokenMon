@@ -123,6 +123,7 @@ ui/
    ```python
    import customtkinter as ctk
 
+
    class FiturBaruTabView:
        def __init__(self, parent: ctk.CTkFrame, dashboard):
            self.parent = parent
@@ -130,7 +131,9 @@ ui/
            self._build_ui()
 
        def _build_ui(self):
-           ctk.CTkLabel(self.parent, text="🚀 Fitur Baru", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
+           ctk.CTkLabel(
+               self.parent, text="🚀 Fitur Baru", font=ctk.CTkFont(size=16, weight="bold")
+           ).pack(pady=10)
 
        def refresh(self):
            pass

@@ -79,12 +79,8 @@ class PokedexTabView:
 
         dex_species = self.store.get_dex_species()
         mode = self.view_mode_btn.get() if hasattr(self, "view_mode_btn") else "📖 Pokédex"
-        search_kw = (
-            self.entry_search.get().strip().lower() if hasattr(self, "entry_search") else ""
-        )
-        rarity_filter = (
-            self.filter_selector.get() if hasattr(self, "filter_selector") else "All"
-        )
+        search_kw = self.entry_search.get().strip().lower() if hasattr(self, "entry_search") else ""
+        rarity_filter = self.filter_selector.get() if hasattr(self, "filter_selector") else "All"
 
         total_registered = len(dex_species)
         total_logs = len(self.store.catch_log)
@@ -134,8 +130,7 @@ class PokedexTabView:
         filtered = dex_species
         if search_kw:
             filtered = [
-                s for s in filtered
-                if search_kw in s["name"].lower() or str(s["id"]) in search_kw
+                s for s in filtered if search_kw in s["name"].lower() or str(s["id"]) in search_kw
             ]
         if rarity_filter != "All":
             filtered = [s for s in filtered if s["rarity"].lower() == rarity_filter.lower()]
@@ -171,9 +166,7 @@ class PokedexTabView:
                 corner_radius=12,
                 border_width=2 if (is_shiny or is_raising) else 1,
                 border_color=(
-                    "#F1C40F"
-                    if is_shiny
-                    else (theme["primary"] if is_raising else theme["border"])
+                    "#F1C40F" if is_shiny else (theme["primary"] if is_raising else theme["border"])
                 ),
                 fg_color=theme["card_bg"],
                 height=155,

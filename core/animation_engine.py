@@ -61,7 +61,9 @@ class AnimationController:
             t = i / total
             y_offset = -int(amp * math.sin(math.pi * t) * math.exp(-2.5 * t))
             on_offset(y_offset)
-            self._schedule(dt, lambda: self._bounce_step(i + 1, total, amp, dt, y_offset, on_offset))
+            self._schedule(
+                dt, lambda: self._bounce_step(i + 1, total, amp, dt, y_offset, on_offset)
+            )
             return
 
         # Canvas move fallback when on_offset is not used

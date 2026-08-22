@@ -2,7 +2,7 @@
 
 > **Language / Bahasa**: [**English**](../KNOWN-LIMITATIONS.md) | [**Bahasa Indonesia**](KNOWN-LIMITATIONS.id.md)
 
-Dokumen ini menguraikan batasan teknis, perilaku khusus pada platform Windows, dan solusi praktis untuk **WinTokenMon (`v0.1.0-beta`)**.
+Dokumen ini menguraikan batasan teknis, perilaku khusus pada platform Windows, dan solusi praktis untuk **WinTokenMon (`v1.0.0`)**.
 
 ---
 

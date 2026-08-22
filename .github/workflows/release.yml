@@ -32,11 +32,21 @@ jobs:
       - name: Install build dependencies
         run: uv sync --all-extras
 
+      - name: Run lint suite
+        run: uv run ruff check .
+
       - name: Run automated test suite
         run: uv run pytest -v
 
       - name: Build Standalone Executable & Setup Installer
         run: uv run python scripts/build_installer.py
+
+      - name: Generate SHA256 checksums
+        run: |
+          Get-ChildItem dist\*.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $($_.Name)" | Out-File -FilePath "$($_.FullName).sha256" -Encoding ascii
+          }
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -47,3 +57,4 @@ jobs:
           files: |
             dist/WinTokenMon-*-Portable.exe
             dist/WinTokenMon-Setup-*.exe
+            dist/*.exe.sha256

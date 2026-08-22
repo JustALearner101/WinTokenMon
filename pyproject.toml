@@ -1,6 +1,6 @@
 [project]
 name = "wintokenmon"
-version = "0.1.0"
+version = "1.0.0"
 description = "Universal local AI token usage monitor & desktop pet companion for Windows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,9 +22,7 @@ dependencies = [
     "customtkinter>=6.0.0",
     "pystray>=0.19.5",
     "Pillow>=10.0.0",
-    "darkdetect>=0.8.0",
     "pygame-ce>=2.5.0",
-    "python-dotenv>=1.0.0",
 ]
 
 [project.urls]

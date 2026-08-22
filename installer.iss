@@ -1,18 +1,18 @@
 ; =====================================================================
 ; Inno Setup 6 Script for WinTokenMon for Windows
-; Compiles: WinTokenMon-Setup-v0.1.0-beta.exe
+; Compiles: WinTokenMon-Setup-v0.2.0-preview.exe
 ; =====================================================================
 
 #define MyAppName "WinTokenMon"
-#define MyAppVersion "0.1.0-beta"
+#define MyAppVersion "0.2.0-preview"
 #define MyAppPublisher "WinTokenMon Contributors"
-#define MyAppURL "https://github.com/YourUsername/WinTokenMon-Win"
-#define MyAppExeName "WinTokenMon-v0.1.0-beta-Portable.exe"
+#define MyAppURL "https://github.com/JustALearner101/WinTokenMon"
+#define MyAppExeName "WinTokenMon-v0.2.0-preview-Portable.exe"
 
 [Setup]
 ; Unique Application ID
 AppId={{E5B239C8-8271-4A59-B87A-28FE1C2956D3}
-AppName={#MyAppName} (Beta)
+AppName={#MyAppName} (Preview)
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} v{#MyAppVersion}
 AppPublisher={#MyAppPublisher}

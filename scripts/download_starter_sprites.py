@@ -15,25 +15,45 @@ os.makedirs(ASSETS_SPRITES_DIR, exist_ok=True)
 # Curated starter species IDs across Gen 1 to Gen 9 + Special starters
 STARTER_SPECIES_IDS = [
     # Gen 1 (Kanto)
-    1, 4, 7,
+    1,
+    4,
+    7,
     # Gen 2 (Johto)
-    152, 155, 158,
+    152,
+    155,
+    158,
     # Gen 3 (Hoenn)
-    252, 255, 258,
+    252,
+    255,
+    258,
     # Gen 4 (Sinnoh)
-    387, 390, 393,
+    387,
+    390,
+    393,
     # Gen 5 (Unova)
-    495, 498, 501,
+    495,
+    498,
+    501,
     # Gen 6 (Kalos)
-    650, 653, 656,
+    650,
+    653,
+    656,
     # Gen 7 (Alola)
-    722, 725, 728,
+    722,
+    725,
+    728,
     # Gen 8 (Galar)
-    810, 813, 816,
+    810,
+    813,
+    816,
     # Gen 9 (Paldea)
-    906, 909, 912,
+    906,
+    909,
+    912,
     # Special ★ (Pikachu, Eevee, Riolu)
-    25, 133, 447,
+    25,
+    133,
+    447,
 ]
 
 
@@ -65,7 +85,9 @@ def download_sprite(species_id: int) -> bool:
         pass
 
     # 2. Fallback to PNG sprite
-    png_url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
+    png_url = (
+        f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
+    )
     try:
         req = urllib.request.Request(png_url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -73,7 +95,9 @@ def download_sprite(species_id: int) -> bool:
             if len(data) > 0:
                 with open(local_png, "wb") as f:
                     f.write(data)
-                print(f"  [+] #{species_id:03d} downloaded PNG fallback ({len(data) / 1024:.1f} KB)")
+                print(
+                    f"  [+] #{species_id:03d} downloaded PNG fallback ({len(data) / 1024:.1f} KB)"
+                )
                 return True
     except Exception as e:
         print(f"  Failed to download #{species_id:03d}: {e}")

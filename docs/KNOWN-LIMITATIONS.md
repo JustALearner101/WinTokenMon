@@ -2,7 +2,7 @@
 
 > **Language / Bahasa**: [**English**](KNOWN-LIMITATIONS.md) | [**Bahasa Indonesia**](id/KNOWN-LIMITATIONS.id.md)
 
-This document outlines known technical constraints, Windows platform-specific behaviors, and practical workarounds in **WinTokenMon (`v0.1.0-beta`)**.
+This document outlines known technical constraints, Windows platform-specific behaviors, and practical workarounds in **WinTokenMon (`v1.0.0`)**.
 
 ---
 

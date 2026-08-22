@@ -142,8 +142,7 @@ class PokedexInspectorModal:
             chain_ids = line_info["chain"]
             tree_str = " ➔ ".join(
                 [
-                    f"{n} (#{cid:03d})"
-                    + (" ⭐" if cid == species_id else "")
+                    f"{n} (#{cid:03d})" + (" ⭐" if cid == species_id else "")
                     for n, cid in zip(names, chain_ids)
                 ]
             )

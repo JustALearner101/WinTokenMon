@@ -123,6 +123,8 @@ DumpStack.log.tmp
 # OTHERS & TEMPORARY EXCLUSIONS
 # ==========================================
 /pic
+*.backup
+*.tmp
 CONTRIBUTING.md
 docs/**/CONTRIBUTING*.md
 *CONTRIBUTING*

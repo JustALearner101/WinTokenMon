@@ -21,7 +21,7 @@ A clear and concise description of what you expected to happen.
 - OS: Windows 10 / Windows 11 (Version: _____)
 - Python Version (if running from source): 3.10 / 3.11 / 3.12 / 3.14
 - Active AI Coding Tools: [ ] Claude Code [ ] Cursor [ ] Codex [ ] Copilot [ ] Antigravity [ ] Koma
-- WinTokenMon Version: v0.1.0-beta
+- WinTokenMon Version: v0.2.0-preview (or v0.1.0-beta)
 
 **Additional Context / Screenshots**
 Add any other context or screenshots about the problem here.

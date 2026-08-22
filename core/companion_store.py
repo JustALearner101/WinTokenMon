@@ -5,10 +5,15 @@ Game state and mechanics engine for WinTokenMon Windows
 import json
 import os
 import random
+import shutil
 import time
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
+from .applog import log_error
+from .autostart import is_autostart_enabled
+from .autostart import set_autostart as reg_set_autostart
 from .models import (
     ActivePokemon,
     EggTier,
@@ -23,16 +28,48 @@ DATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Win
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+DEFAULT_INVENTORY = lambda: {  # noqa: E731
+    ItemKind.RARE_CANDY.value: 1,
+    ItemKind.ORAN_BERRY.value: 0,
+    ItemKind.MINT.value: 0,
+    ItemKind.SHINY_CHARM.value: 0,
+}
+
+# Scalar/JSON-ready settings persisted verbatim between save() and load()
+_SIMPLE_FIELDS = {
+    "egg_usage": 0,
+    "spendable_tokens": 0,
+    "total_tokens_burned_lifetime": 0,
+    "daily_token_limit": 20_000_000,
+    "notified_80_today": False,
+    "notified_100_today": False,
+    "last_notification_date": "",
+    "pet_size_preset": "medium",
+    "pet_opacity": 100,
+    "taskbar_snap": False,
+    "sound_enabled": True,
+    "roaming_enabled": True,
+    "spawn_intro_enabled": True,
+    "auto_evolve_enabled": False,
+    "autostart_enabled": False,
+    "display_mode": "full_pet",
+    "hud_position": None,
+    "hud_opacity": 90,
+    "starter_chosen": False,
+    # Auto-update preferences (RFC v1.0.0 §4)
+    "auto_check_updates_enabled": True,
+    "skipped_update_version": "",
+    "last_update_check_time": 0.0,
+}
+
 # Backward-compatible migration from legacy PokeTokenBar directory
 OLD_DATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "PokeTokenBar")
 OLD_STATE_FILE = os.path.join(OLD_DATA_DIR, "state.json")
 if not os.path.exists(STATE_FILE) and os.path.exists(OLD_STATE_FILE):
     try:
-        import shutil
-
         shutil.copy2(OLD_STATE_FILE, STATE_FILE)
-    except Exception:
-        pass
+    except Exception as exc:
+        log_error(f"legacy_state_migration_failed: {exc}")
 
 
 @dataclass
@@ -44,6 +81,7 @@ class CeremonyEvent:
     GRADUATE = "graduate"
     CANDY_XP = "candy_xp"
     MINT_CHANGE = "mint_change"
+    FRIENDSHIP_UP = "friendship_up"
 
     event_type: str
     species_id: int = 0
@@ -51,6 +89,8 @@ class CeremonyEvent:
     is_shiny: bool = False
     xp_amount: int = 0
     new_nature: str = ""
+    friendship_amount: int = 0
+    item_kind: str = ""
 
 
 class CompanionStore:
@@ -62,11 +102,7 @@ class CompanionStore:
             str, dict
         ] = {}  # str(species_id) -> {"name": str, "shiny": bool, "caught_at": float}
         self.catch_log: list[dict] = []
-        self.inventory: dict[str, int] = {
-            ItemKind.RARE_CANDY.value: 1,
-            ItemKind.MINT.value: 0,
-            ItemKind.SHINY_CHARM.value: 0,
-        }
+        self.inventory: dict[str, int] = DEFAULT_INVENTORY()
         self.spendable_tokens: int = 0
         self.total_tokens_burned_lifetime: int = 0
 
@@ -82,6 +118,26 @@ class CompanionStore:
         self.taskbar_snap: bool = False
         self.sound_enabled: bool = True
         self.roaming_enabled: bool = True  # Autonomous wandering on desktop
+        self.spawn_intro_enabled: bool = True  # Pokéball entrance intro animation on startup
+        self.auto_evolve_enabled: bool = False  # Auto-evolve vs manual trigger when threshold met
+        self.autostart_enabled: bool = False  # Start with Windows boot (HKCU Run key)
+
+        # Compact HUD presentation mode (v0.4.0)
+        self.display_mode: str = "full_pet"  # "full_pet" or "compact_hud"
+        self.hud_position: dict | None = None  # {"x": int, "y": int}
+        self.hud_opacity: int = 90  # 50 - 100%
+        self.tracked_providers: dict[str, bool] = {
+            "antigravity": True,
+            "claude": True,
+            "cursor": True,
+            "codex": True,
+            "copilot": True,
+            "koma": True,
+            "aider": True,
+            "windsurf": True,
+            "cline": True,
+            "roo": True,
+        }
 
         # 7-day token history: {"YYYY-MM-DD": tokens}
         self.daily_history: dict[str, int] = {}
@@ -97,6 +153,17 @@ class CompanionStore:
         # Starter selection flag for first launch
         self.starter_chosen: bool = False
 
+        # Achievements & Badges tracking (v0.2.0)
+        self.unlocked_achievements: dict[str, float] = {}  # badge_id -> timestamp
+        self.purchased_egg_tiers: list[str] = []
+        self.total_hatches: int = 0
+        self.on_achievement_callbacks = []
+
+        # Auto-update preferences (persisted via _SIMPLE_FIELDS)
+        self.auto_check_updates_enabled: bool = True
+        self.skipped_update_version: str = ""
+        self.last_update_check_time: float = 0.0
+
         self.load()
 
         # If existing state already has an active companion or pokedex entry, mark starter as chosen
@@ -104,97 +171,190 @@ class CompanionStore:
             self.starter_chosen = True
 
     def save(self):
-        data = {
-            "active": {
-                "species_id": self.active.species_id,
-                "species_name": self.active.species_name,
-                "stage_index": self.active.stage_index,
-                "total_forms": self.active.total_forms,
-                "used_at_stage": self.active.used_at_stage,
-                "rarity": self.active.rarity.value,
-                "nature": self.active.nature.value,
-                "is_shiny": self.active.is_shiny,
-                "hatched_at": self.active.hatched_at,
-                "evolution_chain_ids": self.active.evolution_chain_ids,
+        data = {f: getattr(self, f) for f in _SIMPLE_FIELDS}
+        data.update(
+            {
+                "active": self._serialize_active() if self.active else None,
+                "egg_tier": self.egg_tier.value,
+                "pokedex": self.pokedex,
+                "catch_log": self.catch_log,
+                "inventory": self.inventory,
+                "tracked_providers": self.tracked_providers,
             }
-            if self.active
-            else None,
-            "egg_usage": self.egg_usage,
-            "egg_tier": self.egg_tier.value,
-            "pokedex": self.pokedex,
-            "catch_log": self.catch_log,
-            "inventory": self.inventory,
-            "spendable_tokens": self.spendable_tokens,
-            "total_tokens_burned_lifetime": self.total_tokens_burned_lifetime,
-            "daily_token_limit": self.daily_token_limit,
-            "notified_80_today": self.notified_80_today,
-            "notified_100_today": self.notified_100_today,
-            "last_notification_date": self.last_notification_date,
-            "pet_size_preset": self.pet_size_preset,
-            "pet_opacity": self.pet_opacity,
-            "taskbar_snap": self.taskbar_snap,
-            "sound_enabled": self.sound_enabled,
-            "roaming_enabled": self.roaming_enabled,
-            "starter_chosen": self.starter_chosen,
-            "daily_history": self.daily_history,
-        }
+        )
         try:
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, separators=(",", ":"))
-        except Exception:
-            pass
-
-    def load(self):
-        if not os.path.exists(STATE_FILE):
+            payload = json.dumps(data, separators=(",", ":"))
+        except Exception as exc:
+            log_error(f"state.serialize_failed: {exc}")
             return
         try:
-            with open(STATE_FILE, encoding="utf-8") as f:
-                data = json.load(f)
+            # Atomic write: temp file + os.replace so a crash mid-write can
+            # never leave a half-written state.json behind.
+            tmp_path = STATE_FILE + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(payload)
+            if os.path.exists(STATE_FILE) and os.path.getsize(STATE_FILE) > 0:
+                shutil.copy2(STATE_FILE, STATE_FILE + ".bak")
+            os.replace(tmp_path, STATE_FILE)
+        except Exception as exc:
+            log_error(f"state.write_failed: {exc}")
 
-            act_data = data.get("active")
-            if act_data:
-                self.active = ActivePokemon(
-                    species_id=act_data["species_id"],
-                    species_name=act_data["species_name"],
-                    stage_index=act_data["stage_index"],
-                    total_forms=act_data["total_forms"],
-                    used_at_stage=act_data["used_at_stage"],
-                    rarity=Rarity(act_data["rarity"]),
-                    nature=PokemonNature(act_data["nature"]),
-                    is_shiny=act_data["is_shiny"],
-                    hatched_at=act_data.get("hatched_at", time.time()),
-                    evolution_chain_ids=act_data.get("evolution_chain_ids", []),
-                )
-            else:
-                self.active = None
+    def _serialize_active(self) -> dict:
+        a = self.active
+        return {
+            "species_id": a.species_id,
+            "species_name": a.species_name,
+            "stage_index": a.stage_index,
+            "total_forms": a.total_forms,
+            "used_at_stage": a.used_at_stage,
+            "rarity": a.rarity.value,
+            "nature": a.nature.value,
+            "is_shiny": a.is_shiny,
+            "hatched_at": a.hatched_at,
+            "evolution_chain_ids": a.evolution_chain_ids,
+            "friendship": a.friendship,
+            "last_pet_date": a.last_pet_date,
+            "daily_pet_count": a.daily_pet_count,
+            "treats_eaten_today": a.treats_eaten_today,
+            "last_treat_date": a.last_treat_date,
+        }
 
-            self.egg_usage = data.get("egg_usage", 0)
-            self.egg_tier = EggTier(data.get("egg_tier", "standard"))
-            self.pokedex = data.get("pokedex", {})
-            self.catch_log = data.get("catch_log", [])
-            self.inventory = data.get(
-                "inventory",
-                {
-                    ItemKind.RARE_CANDY.value: 1,
-                    ItemKind.MINT.value: 0,
-                    ItemKind.SHINY_CHARM.value: 0,
-                },
+    def load(self):
+        """Loads state from the primary file, falling back to the .bak backup.
+
+        A corrupt primary file is quarantined (never overwritten by the next
+        save) before trying the backup.
+        """
+        candidates = [STATE_FILE]
+        if os.path.exists(STATE_BAK := STATE_FILE + ".bak"):
+            candidates.append(STATE_BAK)
+
+        data = None
+        for candidate in candidates:
+            if not os.path.exists(candidate):
+                continue
+            try:
+                with open(candidate, encoding="utf-8") as f:
+                    data = json.load(f)
+                break
+            except Exception as exc:
+                log_error(f"state.unreadable ({candidate}): {exc}")
+                if candidate == STATE_FILE:
+                    self._quarantine_corrupt_state()
+                continue
+
+        if isinstance(data, dict):
+            try:
+                self._apply_state(data)
+            except Exception as exc:
+                log_error(f"state.apply_failed: {exc}")
+        elif data is not None:
+            log_error("state.unexpected_format: root is not an object; using defaults")
+
+    def _quarantine_corrupt_state(self):
+        """Moves a corrupt state.json aside so the next save cannot destroy it."""
+        try:
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            os.replace(STATE_FILE, STATE_FILE + f".corrupt-{stamp}")
+            log_error(f"state.quarantined -> {STATE_FILE}.corrupt-{stamp}")
+        except Exception as exc:
+            log_error(f"state.quarantine_failed: {exc}")
+
+    def _apply_state(self, data: dict):
+        act_data = data.get("active")
+        if act_data:
+            self.active = ActivePokemon(
+                species_id=act_data["species_id"],
+                species_name=act_data["species_name"],
+                stage_index=act_data["stage_index"],
+                total_forms=act_data["total_forms"],
+                used_at_stage=act_data["used_at_stage"],
+                rarity=Rarity(act_data["rarity"]),
+                nature=PokemonNature(act_data["nature"]),
+                is_shiny=bool(act_data["is_shiny"]),
+                hatched_at=act_data.get("hatched_at", time.time()),
+                evolution_chain_ids=act_data.get("evolution_chain_ids", []),
+                friendship=act_data.get("friendship", 50),
+                last_pet_date=act_data.get("last_pet_date", ""),
+                daily_pet_count=act_data.get("daily_pet_count", 0),
+                treats_eaten_today=act_data.get("treats_eaten_today", 0),
+                last_treat_date=act_data.get("last_treat_date", ""),
             )
-            self.spendable_tokens = data.get("spendable_tokens", 0)
-            self.total_tokens_burned_lifetime = data.get("total_tokens_burned_lifetime", 0)
-            self.daily_token_limit = data.get("daily_token_limit", 20_000_000)
-            self.notified_80_today = data.get("notified_80_today", False)
-            self.notified_100_today = data.get("notified_100_today", False)
-            self.last_notification_date = data.get("last_notification_date", "")
-            self.pet_size_preset = data.get("pet_size_preset", "medium")
-            self.pet_opacity = data.get("pet_opacity", 100)
-            self.taskbar_snap = data.get("taskbar_snap", False)
-            self.sound_enabled = data.get("sound_enabled", True)
-            self.roaming_enabled = data.get("roaming_enabled", True)
-            self.starter_chosen = data.get("starter_chosen", self.active is not None)
-            self.daily_history = data.get("daily_history", {})
-        except Exception:
-            pass
+        else:
+            self.active = None
+
+        try:
+            self.egg_tier = EggTier(data.get("egg_tier", "standard"))
+        except ValueError:
+            self.egg_tier = EggTier.STANDARD
+            log_error(f"state.invalid_egg_tier: {data.get('egg_tier')!r}")
+        self.pokedex = data.get("pokedex", {})
+        self.catch_log = data.get("catch_log", [])
+        self.inventory = data.get("inventory") or DEFAULT_INVENTORY()
+        if ItemKind.ORAN_BERRY.value not in self.inventory:
+            self.inventory[ItemKind.ORAN_BERRY.value] = 0
+        for field, default in _SIMPLE_FIELDS.items():
+            setattr(self, field, data.get(field, default))
+        if is_autostart_enabled():
+            self.autostart_enabled = True
+        saved_providers = data.get("tracked_providers", {})
+        for key in self.tracked_providers:
+            if key in saved_providers:
+                self.tracked_providers[key] = bool(saved_providers[key])
+        self.daily_history = data.get("daily_history", {})
+        self.unlocked_achievements = data.get("unlocked_achievements", {})
+        self.purchased_egg_tiers = data.get("purchased_egg_tiers", [])
+        self.total_hatches = data.get("total_hatches", len(self.catch_log))
+
+        self._clamp_loaded_values()
+
+        # Retro-migration for existing users without achievement records
+        self._run_achievement_retro_migration()
+
+    def _clamp_loaded_values(self):
+        """Sanity-clamps numeric fields so a damaged save cannot produce
+        negative balances or out-of-range stats."""
+        self.spendable_tokens = max(0, int(self.spendable_tokens or 0))
+        self.total_tokens_burned_lifetime = max(0, int(self.total_tokens_burned_lifetime or 0))
+        self.daily_token_limit = max(0, int(self.daily_token_limit or 0))
+        self.egg_usage = max(0, int(self.egg_usage or 0))
+        self.total_hatches = max(0, int(self.total_hatches or 0))
+        if self.active is not None:
+            self.active.friendship = max(0, min(100, int(self.active.friendship)))
+            self.active.used_at_stage = max(0, int(self.active.used_at_stage))
+            chain = self.active.evolution_chain_ids
+            if not chain or not (0 <= self.active.stage_index < len(chain)):
+                self.active.stage_index = min(
+                    max(0, self.active.stage_index), max(0, len(chain) - 1)
+                )
+
+    def _run_achievement_retro_migration(self):
+        """Retroactively grants achievements based on existing savegame progression."""
+        # 100M Burn Club
+        if (
+            self.total_tokens_burned_lifetime >= 100_000_000
+            and "100m_burn_club" not in self.unlocked_achievements
+        ):
+            self.unlock_achievement("100m_burn_club")
+        # First Hatch
+        if (
+            self.total_hatches >= 1 or len(self.catch_log) >= 1
+        ) and "first_hatch" not in self.unlocked_achievements:
+            self.unlock_achievement("first_hatch")
+        # Shiny Hunter
+        has_shiny = any(bool(entry.get("shiny")) for entry in self.pokedex.values()) or (
+            self.active and self.active.is_shiny
+        )
+        if has_shiny and "shiny_hunter" not in self.unlocked_achievements:
+            self.unlock_achievement("shiny_hunter")
+        # Senior Professor
+        if len(self.catch_log) >= 5 and "senior_professor" not in self.unlocked_achievements:
+            self.unlock_achievement("senior_professor")
+        # Egg Hoarder
+        if {"uncommon", "rare", "legendary"}.issubset(
+            set(self.purchased_egg_tiers)
+        ) and "egg_hoarder" not in self.unlocked_achievements:
+            self.unlock_achievement("egg_hoarder")
 
     @property
     def is_egg(self) -> bool:
@@ -229,6 +389,27 @@ class CompanionStore:
             return False
         return self.active.stage_index >= (self.active.total_forms - 1)
 
+    @property
+    def is_ready_to_evolve(self) -> bool:
+        """Returns True if companion has reached token threshold for evolution and is awaiting evolution."""
+        if self.is_egg or not self.active or self.is_final_stage:
+            return False
+        return self.active.used_at_stage >= self.current_threshold
+
+    @property
+    def next_species_info(self) -> tuple[int, str] | None:
+        """Returns (next_species_id, next_species_name) if active companion can evolve."""
+        if not self.active or self.is_final_stage or self.is_egg:
+            return None
+        next_stage_idx = self.active.stage_index + 1
+        if next_stage_idx < len(self.active.evolution_chain_ids):
+            next_id = self.active.evolution_chain_ids[next_stage_idx]
+            line = SPECIES_INDEX.get(next_id)
+            if line and next_id in line["chain"]:
+                idx = line["chain"].index(next_id)
+                return next_id, line["names"][idx]
+        return None
+
     def record_daily_tokens(self, today_tokens: int):
         """Records today's token count in the 7-day rolling history, skipping disk write if unchanged."""
         today_str = time.strftime("%Y-%m-%d")
@@ -248,7 +429,13 @@ class CompanionStore:
 
         self.spendable_tokens += delta
         self.total_tokens_burned_lifetime += delta
-        self._add_companion_exp(delta)
+
+        # High friendship (>= 80%) grants +10% bonus companion EXP
+        effective_exp = delta
+        if self.active and self.active.friendship >= 80:
+            effective_exp = int(delta * 1.10)
+
+        self._add_companion_exp(effective_exp)
         self.save()
 
     def _add_companion_exp(self, delta: int):
@@ -267,12 +454,11 @@ class CompanionStore:
         else:
             self.active.used_at_stage += delta
             if self.active.used_at_stage >= thresh:
-                overflow = self.active.used_at_stage - thresh
                 if not self.is_final_stage:
-                    self.evolve()
-                    if overflow > 0:
-                        self._add_companion_exp(overflow)
+                    if self.auto_evolve_enabled:
+                        self.evolve()
                 else:
+                    overflow = self.active.used_at_stage - thresh
                     self.graduate()
                     if overflow > 0:
                         self._add_companion_exp(overflow)
@@ -321,6 +507,7 @@ class CompanionStore:
         )
         self.egg_usage = 0
         self.egg_tier = EggTier.STANDARD
+        self.total_hatches += 1
 
         # Register in Pokédex immediately
         self._record_pokedex(self.active.species_id, self.active.species_name, self.active.is_shiny)
@@ -381,9 +568,6 @@ class CompanionStore:
                 is_shiny=self.active.is_shiny,
             )
         )
-
-        for cb in self.on_hatch_callbacks:
-            cb(self.active)
         self.save()
         return True
 
@@ -391,6 +575,9 @@ class CompanionStore:
         """Evolves active Pokémon to the next stage in its evolution chain."""
         if not self.active or self.is_final_stage:
             return
+
+        thresh = self.current_threshold
+        overflow = max(0, self.active.used_at_stage - thresh)
 
         self.active.stage_index += 1
         self.active.used_at_stage = 0
@@ -416,6 +603,10 @@ class CompanionStore:
 
         for cb in self.on_evolve_callbacks:
             cb(self.active)
+
+        if overflow > 0:
+            self._add_companion_exp(overflow)
+
         self.save()
 
     def graduate(self):
@@ -459,21 +650,108 @@ class CompanionStore:
             cb(graduated_pokemon)
         self.save()
 
+    def pet_companion(self) -> tuple[bool, int, str]:
+        """
+        Interacts with (pets) the active companion.
+        Grants +5 Friendship per pet up to 4 times a day (max +20% daily).
+        Returns (success, current_friendship, feedback_message).
+        """
+        if self.is_egg or not self.active:
+            return False, 0, "No active Pokémon to pet."
+
+        today_str = time.strftime("%Y-%m-%d")
+        if self.active.last_pet_date != today_str:
+            self.active.last_pet_date = today_str
+            self.active.daily_pet_count = 0
+
+        if self.active.daily_pet_count >= 4:
+            return (
+                False,
+                self.active.friendship,
+                f"{self.active.species_name} is feeling plenty loved today! (Daily limit reached)",
+            )
+
+        self.active.daily_pet_count += 1
+        gain = 5
+        old_f = self.active.friendship
+        self.active.friendship = min(100, self.active.friendship + gain)
+        actual_gain = self.active.friendship - old_f
+
+        self.ceremony_queue.append(
+            CeremonyEvent(
+                event_type=CeremonyEvent.FRIENDSHIP_UP,
+                friendship_amount=actual_gain,
+                species_name=self.active.species_name,
+            )
+        )
+        self.save()
+        return (
+            True,
+            self.active.friendship,
+            f"Petted {self.active.species_name}! (+{gain}% Friendship, {self.active.friendship}%)",
+        )
+
+    def feed_treat(self, item_kind: ItemKind | str) -> tuple[bool, int, int]:
+        """
+        Feeds a treat (Rare Candy or Oran Berry) to the companion.
+        Consumes 1 item, awards EXP and Friendship.
+        Returns (success, xp_gained, new_friendship).
+        """
+        if isinstance(item_kind, str):
+            try:
+                item_kind = ItemKind(item_kind)
+            except ValueError:
+                return False, 0, 0
+
+        if self.inventory.get(item_kind.value, 0) <= 0:
+            return False, 0, 0
+
+        self.inventory[item_kind.value] -= 1
+
+        today_str = time.strftime("%Y-%m-%d")
+        if self.active:
+            if self.active.last_treat_date != today_str:
+                self.active.last_treat_date = today_str
+                self.active.treats_eaten_today = 0
+            self.active.treats_eaten_today += 1
+
+        if item_kind == ItemKind.RARE_CANDY:
+            xp = 100_000_000
+            f_gain = 15
+        elif item_kind == ItemKind.ORAN_BERRY:
+            xp = 10_000_000
+            f_gain = 10
+        else:
+            xp = 0
+            f_gain = 0
+
+        if self.active and f_gain > 0:
+            self.active.friendship = min(100, self.active.friendship + f_gain)
+
+        self.ceremony_queue.append(
+            CeremonyEvent(
+                event_type=CeremonyEvent.CANDY_XP,
+                xp_amount=xp,
+                item_kind=item_kind.value,
+            )
+        )
+
+        if xp > 0:
+            self._add_companion_exp(xp)
+
+        self.save()
+        f_val = self.active.friendship if self.active else 0
+        return True, xp, f_val
+
     def use_item(self, item: ItemKind) -> bool:
         """Uses an item from the inventory."""
         count = self.inventory.get(item.value, 0)
         if count <= 0:
             return False
 
-        if item == ItemKind.RARE_CANDY:
-            self.inventory[item.value] -= 1
-            # Add 100M EXP
-            self.ceremony_queue.append(
-                CeremonyEvent(event_type=CeremonyEvent.CANDY_XP, xp_amount=100_000_000)
-            )
-            self.add_tokens(100_000_000)
-            self.save()
-            return True
+        if item in (ItemKind.RARE_CANDY, ItemKind.ORAN_BERRY):
+            success, _, _ = self.feed_treat(item)
+            return success
         elif item == ItemKind.SHINY_CHARM:
             # Passive item, already active when owned
             return True
@@ -555,20 +833,13 @@ class CompanionStore:
 
     def get_active_streak(self) -> int:
         """Calculates consecutive active days with recorded token usage."""
-        if not self.daily_history:
-            return 1 if self.active is not None else 0
-
         streak = 0
-        from datetime import datetime, timedelta
-
         today = datetime.now()
         for i in range(14):
             day_str = (today - timedelta(days=i)).strftime("%Y-%m-%d")
-            tokens = self.daily_history.get(day_str, 0)
-            if tokens > 0 or i == 0:
-                if tokens > 0:
-                    streak += 1
-            else:
+            if self.daily_history.get(day_str, 0) > 0:
+                streak += 1
+            elif i > 0:
                 break
         return max(1, streak)
 
@@ -593,7 +864,49 @@ class CompanionStore:
         self.active = None
         self.egg_usage = 0
         self.egg_tier = tier
+        if tier.value not in self.purchased_egg_tiers:
+            self.purchased_egg_tiers.append(tier.value)
+
+        # Egg Hoarder: adopted all three paid egg tiers
+        if {"uncommon", "rare", "legendary"}.issubset(set(self.purchased_egg_tiers)):
+            self.unlock_achievement("egg_hoarder")
+
         self.save()
+        return True
+
+    def unlock_achievement(self, badge_id: str) -> bool:
+        """
+        Unlocks an achievement badge, awards tokens / items, and triggers callbacks.
+        Guaranteed idempotent: returns False if already unlocked.
+        """
+        if badge_id in self.unlocked_achievements:
+            return False
+
+        from .models import ACHIEVEMENT_DEFINITIONS
+
+        badge = ACHIEVEMENT_DEFINITIONS.get(badge_id)
+        if not badge:
+            return False
+
+        self.unlocked_achievements[badge_id] = time.time()
+
+        # Grant rewards
+        if badge.reward_tokens > 0:
+            self.spendable_tokens += badge.reward_tokens
+
+        if badge.reward_item:
+            count = max(1, badge.reward_item_count)
+            self.inventory[badge.reward_item.value] = (
+                self.inventory.get(badge.reward_item.value, 0) + count
+            )
+
+        self.save()
+
+        for cb in self.on_achievement_callbacks:
+            try:
+                cb(badge)
+            except Exception as exc:
+                log_error(f"achievement_callback_failed ({badge.id}): {exc}")
         return True
 
     def reset_to_fresh_egg(self):
@@ -603,7 +916,9 @@ class CompanionStore:
         self.egg_tier = EggTier.STANDARD
         self.save()
 
-    def _record_pokedex(self, species_id: int, name: str, is_shiny: bool, rarity: str | None = None):
+    def _record_pokedex(
+        self, species_id: int, name: str, is_shiny: bool, rarity: str | None = None
+    ):
         key = str(species_id)
         current = self.pokedex.get(key, {})
         shiny_owned = current.get("shiny", False) or is_shiny
@@ -727,3 +1042,106 @@ class CompanionStore:
             return None
 
         return None
+
+    def set_autostart(self, enabled: bool) -> bool:
+        """Enables or disables automatic startup on Windows boot and updates state."""
+        success = reg_set_autostart(enabled)
+        if success:
+            self.autostart_enabled = enabled
+            self.save()
+        return success
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DEVELOPER & DEBUG SANDBOX HELPERS
+    # ─────────────────────────────────────────────────────────────────────────
+    def debug_add_tokens(self, amount: int):
+        """Injects tokens immediately into progression and spendable balance."""
+        self.add_tokens(amount)
+
+    def debug_set_progress_pct(self, pct: float):
+        """Sets current progress percentage (e.g. 0.99 for 99%)."""
+        clamped = max(0.0, min(1.0, pct))
+        target = int(self.current_threshold * clamped)
+        if self.is_egg:
+            self.egg_usage = target
+        elif self.active:
+            self.active.used_at_stage = target
+        self.save()
+
+    def debug_instant_hatch(self, tier: EggTier | None = None):
+        """Hatches current egg immediately or creates a new egg of chosen tier and hatches it."""
+        if not self.is_egg:
+            self.active = None
+            self.egg_usage = 0
+        if tier:
+            self.egg_tier = tier
+        self.hatch_egg()
+
+    def debug_set_species(
+        self, species_id: int, is_shiny: bool = False, stage_index: int = 0
+    ) -> bool:
+        """Sets active Pokémon companion to any species in the database."""
+        line = SPECIES_INDEX.get(species_id)
+        if not line:
+            return False
+        total_forms = len(line["chain"])
+        stg = min(stage_index, total_forms - 1)
+        target_id = line["chain"][stg]
+        target_name = line["names"][stg]
+        nature = self.active.nature if self.active else random.choice(list(PokemonNature))
+        friendship = self.active.friendship if self.active else 70
+
+        self.active = ActivePokemon(
+            species_id=target_id,
+            species_name=target_name,
+            stage_index=stg,
+            total_forms=total_forms,
+            used_at_stage=0,
+            rarity=Rarity(line["rarity"]),
+            nature=nature,
+            is_shiny=is_shiny,
+            hatched_at=time.time(),
+            evolution_chain_ids=line["chain"],
+            friendship=friendship,
+        )
+        self.egg_usage = 0
+        self.starter_chosen = True
+        self._record_pokedex(self.active.species_id, self.active.species_name, self.active.is_shiny)
+        self.save()
+        return True
+
+    def debug_set_friendship(self, value: int):
+        """Sets active companion friendship percentage."""
+        if self.active:
+            self.active.friendship = max(0, min(100, value))
+            self.save()
+
+    def debug_add_all_items(self, qty: int = 10):
+        """Adds generous amounts of all shop items."""
+        self.inventory[ItemKind.RARE_CANDY.value] = (
+            self.inventory.get(ItemKind.RARE_CANDY.value, 0) + qty
+        )
+        self.inventory[ItemKind.ORAN_BERRY.value] = (
+            self.inventory.get(ItemKind.ORAN_BERRY.value, 0) + qty
+        )
+        self.inventory[ItemKind.MINT.value] = self.inventory.get(ItemKind.MINT.value, 0) + qty
+        self.inventory[ItemKind.SHINY_CHARM.value] = 1
+        self.spendable_tokens += 100_000_000
+        self.save()
+
+    def debug_reset_all(self):
+        """Resets all progression and save file to fresh onboarding state."""
+        self.active = None
+        self.egg_usage = 0
+        self.egg_tier = EggTier.STANDARD
+        self.pokedex = {}
+        self.catch_log = []
+        self.inventory = DEFAULT_INVENTORY()
+        self.spendable_tokens = 0
+        self.total_tokens_burned_lifetime = 0
+        self.daily_history = {}
+        self.unlocked_achievements = {}
+        self.purchased_egg_tiers = []
+        self.total_hatches = 0
+        self.starter_chosen = False
+        self.save()
