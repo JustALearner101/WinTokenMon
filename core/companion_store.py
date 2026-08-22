@@ -5,11 +5,13 @@ Game state and mechanics engine for WinTokenMon Windows
 import json
 import os
 import random
+import shutil
 import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from .applog import log_error
 from .autostart import is_autostart_enabled
 from .autostart import set_autostart as reg_set_autostart
 from .models import (
@@ -61,11 +63,9 @@ OLD_DATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), 
 OLD_STATE_FILE = os.path.join(OLD_DATA_DIR, "state.json")
 if not os.path.exists(STATE_FILE) and os.path.exists(OLD_STATE_FILE):
     try:
-        import shutil
-
         shutil.copy2(OLD_STATE_FILE, STATE_FILE)
-    except Exception:
-        pass
+    except Exception as exc:
+        log_error(f"legacy_state_migration_failed: {exc}")
 
 
 @dataclass
@@ -174,10 +174,21 @@ class CompanionStore:
             }
         )
         try:
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, separators=(",", ":"))
-        except Exception:
-            pass
+            payload = json.dumps(data, separators=(",", ":"))
+        except Exception as exc:
+            log_error(f"state.serialize_failed: {exc}")
+            return
+        try:
+            # Atomic write: temp file + os.replace so a crash mid-write can
+            # never leave a half-written state.json behind.
+            tmp_path = STATE_FILE + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(payload)
+            if os.path.exists(STATE_FILE) and os.path.getsize(STATE_FILE) > 0:
+                shutil.copy2(STATE_FILE, STATE_FILE + ".bak")
+            os.replace(tmp_path, STATE_FILE)
+        except Exception as exc:
+            log_error(f"state.write_failed: {exc}")
 
     def _serialize_active(self) -> dict:
         a = self.active
@@ -200,57 +211,113 @@ class CompanionStore:
         }
 
     def load(self):
-        if not os.path.exists(STATE_FILE):
-            return
+        """Loads state from the primary file, falling back to the .bak backup.
+
+        A corrupt primary file is quarantined (never overwritten by the next
+        save) before trying the backup.
+        """
+        candidates = [STATE_FILE]
+        if os.path.exists(STATE_BAK := STATE_FILE + ".bak"):
+            candidates.append(STATE_BAK)
+
+        data = None
+        for candidate in candidates:
+            if not os.path.exists(candidate):
+                continue
+            try:
+                with open(candidate, encoding="utf-8") as f:
+                    data = json.load(f)
+                break
+            except Exception as exc:
+                log_error(f"state.unreadable ({candidate}): {exc}")
+                if candidate == STATE_FILE:
+                    self._quarantine_corrupt_state()
+                continue
+
+        if isinstance(data, dict):
+            try:
+                self._apply_state(data)
+            except Exception as exc:
+                log_error(f"state.apply_failed: {exc}")
+        elif data is not None:
+            log_error("state.unexpected_format: root is not an object; using defaults")
+
+    def _quarantine_corrupt_state(self):
+        """Moves a corrupt state.json aside so the next save cannot destroy it."""
         try:
-            with open(STATE_FILE, encoding="utf-8") as f:
-                data = json.load(f)
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            os.replace(STATE_FILE, STATE_FILE + f".corrupt-{stamp}")
+            log_error(f"state.quarantined -> {STATE_FILE}.corrupt-{stamp}")
+        except Exception as exc:
+            log_error(f"state.quarantine_failed: {exc}")
 
-            act_data = data.get("active")
-            if act_data:
-                self.active = ActivePokemon(
-                    species_id=act_data["species_id"],
-                    species_name=act_data["species_name"],
-                    stage_index=act_data["stage_index"],
-                    total_forms=act_data["total_forms"],
-                    used_at_stage=act_data["used_at_stage"],
-                    rarity=Rarity(act_data["rarity"]),
-                    nature=PokemonNature(act_data["nature"]),
-                    is_shiny=act_data["is_shiny"],
-                    hatched_at=act_data.get("hatched_at", time.time()),
-                    evolution_chain_ids=act_data.get("evolution_chain_ids", []),
-                    friendship=act_data.get("friendship", 50),
-                    last_pet_date=act_data.get("last_pet_date", ""),
-                    daily_pet_count=act_data.get("daily_pet_count", 0),
-                    treats_eaten_today=act_data.get("treats_eaten_today", 0),
-                    last_treat_date=act_data.get("last_treat_date", ""),
-                )
-            else:
-                self.active = None
+    def _apply_state(self, data: dict):
+        act_data = data.get("active")
+        if act_data:
+            self.active = ActivePokemon(
+                species_id=act_data["species_id"],
+                species_name=act_data["species_name"],
+                stage_index=act_data["stage_index"],
+                total_forms=act_data["total_forms"],
+                used_at_stage=act_data["used_at_stage"],
+                rarity=Rarity(act_data["rarity"]),
+                nature=PokemonNature(act_data["nature"]),
+                is_shiny=bool(act_data["is_shiny"]),
+                hatched_at=act_data.get("hatched_at", time.time()),
+                evolution_chain_ids=act_data.get("evolution_chain_ids", []),
+                friendship=act_data.get("friendship", 50),
+                last_pet_date=act_data.get("last_pet_date", ""),
+                daily_pet_count=act_data.get("daily_pet_count", 0),
+                treats_eaten_today=act_data.get("treats_eaten_today", 0),
+                last_treat_date=act_data.get("last_treat_date", ""),
+            )
+        else:
+            self.active = None
 
+        try:
             self.egg_tier = EggTier(data.get("egg_tier", "standard"))
-            self.pokedex = data.get("pokedex", {})
-            self.catch_log = data.get("catch_log", [])
-            self.inventory = data.get("inventory") or DEFAULT_INVENTORY()
-            if ItemKind.ORAN_BERRY.value not in self.inventory:
-                self.inventory[ItemKind.ORAN_BERRY.value] = 0
-            for field, default in _SIMPLE_FIELDS.items():
-                setattr(self, field, data.get(field, default))
-            if is_autostart_enabled():
-                self.autostart_enabled = True
-            saved_providers = data.get("tracked_providers", {})
-            for key in self.tracked_providers:
-                if key in saved_providers:
-                    self.tracked_providers[key] = bool(saved_providers[key])
-            self.daily_history = data.get("daily_history", {})
-            self.unlocked_achievements = data.get("unlocked_achievements", {})
-            self.purchased_egg_tiers = data.get("purchased_egg_tiers", [])
-            self.total_hatches = data.get("total_hatches", len(self.catch_log))
+        except ValueError:
+            self.egg_tier = EggTier.STANDARD
+            log_error(f"state.invalid_egg_tier: {data.get('egg_tier')!r}")
+        self.pokedex = data.get("pokedex", {})
+        self.catch_log = data.get("catch_log", [])
+        self.inventory = data.get("inventory") or DEFAULT_INVENTORY()
+        if ItemKind.ORAN_BERRY.value not in self.inventory:
+            self.inventory[ItemKind.ORAN_BERRY.value] = 0
+        for field, default in _SIMPLE_FIELDS.items():
+            setattr(self, field, data.get(field, default))
+        if is_autostart_enabled():
+            self.autostart_enabled = True
+        saved_providers = data.get("tracked_providers", {})
+        for key in self.tracked_providers:
+            if key in saved_providers:
+                self.tracked_providers[key] = bool(saved_providers[key])
+        self.daily_history = data.get("daily_history", {})
+        self.unlocked_achievements = data.get("unlocked_achievements", {})
+        self.purchased_egg_tiers = data.get("purchased_egg_tiers", [])
+        self.total_hatches = data.get("total_hatches", len(self.catch_log))
 
-            # Retro-migration for existing users without achievement records
-            self._run_achievement_retro_migration()
-        except Exception:
-            pass
+        self._clamp_loaded_values()
+
+        # Retro-migration for existing users without achievement records
+        self._run_achievement_retro_migration()
+
+    def _clamp_loaded_values(self):
+        """Sanity-clamps numeric fields so a damaged save cannot produce
+        negative balances or out-of-range stats."""
+        self.spendable_tokens = max(0, int(self.spendable_tokens or 0))
+        self.total_tokens_burned_lifetime = max(0, int(self.total_tokens_burned_lifetime or 0))
+        self.daily_token_limit = max(0, int(self.daily_token_limit or 0))
+        self.egg_usage = max(0, int(self.egg_usage or 0))
+        self.total_hatches = max(0, int(self.total_hatches or 0))
+        if self.active is not None:
+            self.active.friendship = max(0, min(100, int(self.active.friendship)))
+            self.active.used_at_stage = max(0, int(self.active.used_at_stage))
+            chain = self.active.evolution_chain_ids
+            if not chain or not (0 <= self.active.stage_index < len(chain)):
+                self.active.stage_index = min(
+                    max(0, self.active.stage_index), max(0, len(chain) - 1)
+                )
 
     def _run_achievement_retro_migration(self):
         """Retroactively grants achievements based on existing savegame progression."""
@@ -829,8 +896,8 @@ class CompanionStore:
         for cb in self.on_achievement_callbacks:
             try:
                 cb(badge)
-            except Exception:
-                pass
+            except Exception as exc:
+                log_error(f"achievement_callback_failed ({badge.id}): {exc}")
         return True
 
     def reset_to_fresh_egg(self):

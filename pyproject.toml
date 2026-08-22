@@ -1,6 +1,6 @@
 [project]
 name = "wintokenmon"
-version = "0.2.0-preview"
+version = "1.0.0"
 description = "Universal local AI token usage monitor & desktop pet companion for Windows"
 readme = "README.md"
 requires-python = ">=3.10"

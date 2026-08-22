@@ -5,6 +5,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.0.0] - Unreleased
+
+### 🛠️ Engineering Quality (Post-v0.4.0 Hardening)
+
+#### ⚡ Performance Optimization
+- **Background Scanner Worker**: Token scanning moved off the Tk mainloop into a daemon worker thread; results are marshalled to the UI via a small queue — periodic disk/SQLite I/O no longer stutters the pet, HUD, or dashboard.
+- **Non-Blocking Sprite Fetching**: `get_sprite_path()` never downloads on the calling thread anymore; missing sprites are fetched in the background with in-flight dedup and callers render a placeholder until the file lands.
+- **Lazy Audio Stack**: pygame mixer initialization and 8-bit SFX synthesis now happen on first playback instead of at import.
+- **Idle CPU Reduction**: Desktop pet skips canvas redraws when nothing can change (static sprite, no active animation offsets) and rests at a 250 ms frame cadence; the dashboard skips teardown/rebuild when no rendered data changed.
+
+#### 🛡️ Stability & Data Integrity
+- **Atomic Savegame Writes**: `state.json` is written to a temp file and swapped with `os.replace()`; a crash mid-write can no longer corrupt the save. A rolling `.bak` of the last known-good state is kept.
+- **Corrupt-State Recovery**: Unreadable state files are quarantined as `state.corrupt-<timestamp>.json` (never silently overwritten) and the save falls back to the `.bak` backup.
+- **Loaded-Value Clamping**: Negative balances, out-of-range friendship, and broken evolution-stage indices from damaged saves are clamped to safe values.
+- **Visible Failures**: Application logging moved to `%APPDATA%\WinTokenMon\logs\wintokenmon.log` with size-based rotation; Tk mainloop exceptions and uncaught exceptions are captured; silent `except: pass` blocks on critical paths (scanners, tray, registry autostart, audio, downloads) now record diagnostics.
+- **Clean Shutdown**: Exit from the system tray only signals flags (thread-safe); teardown always runs on the UI thread. The scanner worker supports cooperative stop.
+- **Network Resilience**: Failed sprite/cry downloads enter a 5-minute session cooldown so offline machines stop hammering the network every polling tick.
+
+#### 🧹 Cleanup
+- Removed the developer debug console UI (modal, hotkey, settings entry) ahead of production release.
+- Dropped unused dependencies `python-dotenv` and `darkdetect`.
+- Fixed the `Egg Hoarder` achievement never unlocking during live gameplay.
+
+---
+
 ## [0.4.0-preview] - 2026-08-22
 
 ### 🚀 Highlights & Major Features

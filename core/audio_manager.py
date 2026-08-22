@@ -8,6 +8,7 @@ import math
 import os
 import struct
 import threading
+import time
 import urllib.request
 import wave
 
@@ -43,7 +44,10 @@ def _get_mixer():
                 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
             _pygame = pygame
             _mixer_ready = True
-        except Exception:
+        except Exception as exc:
+            from .applog import log_once
+
+            log_once("audio.mixer_init", f"pygame mixer unavailable: {exc}")
             _pygame = None
             _mixer_ready = True  # resolution done; result is None
     return _pygame
@@ -173,6 +177,12 @@ def _ensure_sfx_files():
         _sfx_ready = True
 
 
+# Session cooldown for cries that failed to download (offline / missing id):
+# species_id -> monotonic time of last failure.
+_CRY_COOLDOWN_S = 300
+_cry_failed_at: dict[int, float] = {}
+
+
 def get_cry_path(species_id: int) -> str | None:
     """Returns local path to cached .ogg Pokémon cry, downloading if needed."""
     if species_id <= 0:
@@ -180,6 +190,10 @@ def get_cry_path(species_id: int) -> str | None:
     local_path = os.path.join(CRIES_DIR, f"{species_id}.ogg")
     if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
         return local_path
+
+    failed_at = _cry_failed_at.get(species_id)
+    if failed_at is not None and (time.monotonic() - failed_at) < _CRY_COOLDOWN_S:
+        return None
 
     try:
         url = CRY_URL_TEMPLATE.format(species_id=species_id)
@@ -189,9 +203,15 @@ def get_cry_path(species_id: int) -> str | None:
             if len(data) > 0:
                 with open(local_path, "wb") as out_file:
                     out_file.write(data)
+                _cry_failed_at.pop(species_id, None)
                 return local_path
     except Exception:
         pass
+
+    from .applog import log_once
+
+    log_once(f"cry.download.{species_id}", "cry download failed; cooling down")
+    _cry_failed_at[species_id] = time.monotonic()
     return None
 
 

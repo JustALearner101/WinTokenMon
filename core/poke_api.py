@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -346,6 +347,10 @@ POKEMON_TYPES = {
 # Background sprite downloads: never block the UI thread
 _download_inflight: set[tuple[int, bool]] = set()
 _download_lock = threading.Lock()
+# Session cooldown for sprites that failed to download (offline, 404, ...):
+# key -> monotonic time of last failure; retries wait out the window.
+_DOWNLOAD_COOLDOWN_S = 300
+_download_failed_at: dict[tuple[int, bool], float] = {}
 
 
 def _download_sprite(species_id: int, is_shiny: bool):
@@ -368,14 +373,27 @@ def _download_sprite(species_id: int, is_shiny: bool):
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=5) as response, open(target, "wb") as out_file:
                 out_file.write(response.read())
+            _download_failed_at.pop((species_id, is_shiny), None)
             return
         except Exception:
             continue
 
+    from .applog import log_once
+
+    log_once(f"sprite.download.{species_id}.{is_shiny}", "sprite download failed; cooling down")
+    _download_failed_at[(species_id, is_shiny)] = time.monotonic()
+
 
 def _schedule_sprite_download(species_id: int, is_shiny: bool):
-    """Starts a background sprite download once per (species, shiny) until it succeeds."""
+    """Starts a background sprite download once per (species, shiny) until it succeeds.
+
+    Failures enter a short session cooldown so an offline machine does not
+    hammer the network on every polling tick.
+    """
     key = (species_id, is_shiny)
+    failed_at = _download_failed_at.get(key)
+    if failed_at is not None and (time.monotonic() - failed_at) < _DOWNLOAD_COOLDOWN_S:
+        return
     with _download_lock:
         if key in _download_inflight:
             return

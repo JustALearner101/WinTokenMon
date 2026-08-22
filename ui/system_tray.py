@@ -8,6 +8,7 @@ from collections.abc import Callable
 import pystray
 from PIL import Image, ImageDraw
 
+from core.applog import log_once
 from core.companion_store import CompanionStore
 from core.token_reader import TokenUsageSummary
 
@@ -96,8 +97,8 @@ class SystemTrayManager:
         try:
             self.tray_icon.menu = self._build_menu()
             self.tray_icon.update_menu()
-        except Exception:
-            pass
+        except Exception as exc:
+            log_once("tray.menu_update", f"refresh_mode_label failed: {exc}")
 
     def _toggle_roam(self):
         new_val = not getattr(self.store, "roaming_enabled", True)
@@ -133,8 +134,8 @@ class SystemTrayManager:
             return
         try:
             self.tray_icon.notify(message, title)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_once("tray.notify", f"send_notification failed: {exc}")
 
     def stop(self):
         if self.tray_icon:

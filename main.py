@@ -29,17 +29,13 @@ if sys.platform.startswith("win"):
 DEBUG_MODE = os.environ.get("WINTOKENMON_DEBUG", "0").lower() in ("1", "true", "yes")
 POLL_INTERVAL_MS = int(os.environ.get("WINTOKENMON_POLL_INTERVAL", "10")) * 1000
 
-LOG_FILE = os.path.join(ROOT_DIR, "debug.log")
-
 
 def log_error(err: str):
     if DEBUG_MODE:
         print(f"[DEBUG] {err}", file=sys.stderr)
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {err}\n")
-    except Exception:
-        pass
+    from core.applog import log_error as _file_log
+
+    _file_log(err)
 
 
 def tk_safe(func):
@@ -89,6 +85,8 @@ class WinTokenMonApp:
             # Scanner worker thread plumbing: worker scans on disk/network,
             # results are handed to the UI thread via a small queue.
             self._scan_wake = threading.Event()
+            self._scan_stop = threading.Event()
+            self._exit_requested = False
             self._scan_results: queue.Queue[tuple] = queue.Queue(maxsize=2)
 
             # Apply saved provider toggles to the scanner engine
@@ -121,12 +119,19 @@ class WinTokenMonApp:
             self.request_scan()
             self.pet.root.after(250, self._pump_scan_results)
 
+            # Surface Tk mainloop exceptions to the log file instead of stderr void
+            self.pet.root.report_callback_exception = self._on_tk_exception
+
             # If starter not chosen yet on first launch, open starter selection wizard
             if not self.store.starter_chosen:
                 self.pet.root.after(300, self.open_starter_selection)
         except Exception:
             log_error(f"Init Error: {traceback.format_exc()}")
             raise
+
+    @staticmethod
+    def _on_tk_exception(exc_type, exc_value, exc_tb):
+        log_error("".join(traceback.format_exception(exc_type, exc_value, exc_tb)))
 
     def open_starter_selection(self):
         @tk_safe
@@ -242,9 +247,11 @@ class WinTokenMonApp:
 
     def _scanner_loop(self):
         """Worker loop: scans all token sources, hands results to the UI queue."""
-        while True:
+        while not self._scan_stop.is_set():
             self._scan_wake.wait(POLL_INTERVAL_MS / 1000.0)
             self._scan_wake.clear()
+            if self._scan_stop.is_set():
+                break
             try:
                 summary, delta = self.reader.get_summary()
                 velocity = self._compute_velocity(summary.today_tokens)
@@ -257,6 +264,9 @@ class WinTokenMonApp:
 
     def _pump_scan_results(self):
         """Drains scanner results on the UI thread and applies them to all views."""
+        if self._exit_requested:
+            self._perform_exit()
+            return
         try:
             while True:
                 summary, delta, velocity = self._scan_results.get_nowait()
@@ -325,16 +335,32 @@ class WinTokenMonApp:
         self.tray.update_tooltip(self.summary)
 
     def exit_app(self):
+        """Requests shutdown. Safe to call from the tray (non-main) thread:
+        only sets flags and stops pystray; the UI pump performs the teardown."""
+        if self._exit_requested:
+            return
+        self._exit_requested = True
+        self._scan_stop.set()
         try:
-            self.tray.stop()
+            if self.tray:
+                self.tray.stop()
+        except Exception as exc:
+            log_error(f"tray.stop failed: {exc}")
+
+    def _perform_exit(self):
+        """Final teardown — always runs on the Tk main thread via the result pump."""
+        try:
             if self.compact_hud:
                 self.compact_hud.destroy()
             self.pet.destroy()
+            self.pet.root.quit()  # ends mainloop; run() returns normally
         except Exception:
-            pass
-        sys.exit(0)
+            log_error(f"Exit Error: {traceback.format_exc()}")
 
     def run(self):
+        sys.excepthook = lambda t, v, tb: log_error(
+            "".join(traceback.format_exception(t, v, tb))
+        )
         try:
             self.pet.root.mainloop()
         except Exception:

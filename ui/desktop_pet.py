@@ -16,6 +16,7 @@ from collections.abc import Callable
 from PIL import Image, ImageDraw, ImageSequence, ImageTk
 
 from core.animation_engine import AnimationController
+from core.applog import log_once
 from core.audio_manager import (
     play_cry,
     play_sfx_crunch,
@@ -352,10 +353,12 @@ class DesktopPetWindow:
 
     def save_position(self):
         try:
-            with open(WINDOW_POS_FILE, "w") as f:
+            tmp = WINDOW_POS_FILE + ".tmp"
+            with open(tmp, "w") as f:
                 json.dump({"x": self.x, "y": self.y}, f)
-        except Exception:
-            pass
+            os.replace(tmp, WINDOW_POS_FILE)
+        except Exception as exc:
+            log_once("window_pos_write", f"save_position failed: {exc}")
 
     def apply_size(self, preset: str):
         """Updates pet window size based on preset ('small', 'medium', 'large')."""

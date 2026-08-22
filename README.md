@@ -28,7 +28,10 @@
   - **Cursor IDE** (`%APPDATA%/Cursor/User/globalStorage/state.vscdb`)
   - **Codex CLI** (`~/.codex/sessions/**/rollout-*.jsonl`)
   - **GitHub Copilot CLI** (`~/.copilot/session-store.db`)
-  - **Koma (aula-id/koma)** (`~/.koma/sessions/*.json` & `~/.koma/ledger/*.jsonl`)
+   - **Koma (aula-id/koma)** (`~/.koma/sessions/*.json` & `~/.koma/ledger/*.jsonl`)
+   - **Aider** (`~/.aider.chat.history.md`)
+   - **Windsurf / Cascade** (`%APPDATA%/Windsurf/User/workspaceStorage/*/state.vscdb`)
+   - **Cline & Roo Code** (`%APPDATA%/Code/User/globalStorage/*` task logs)
 - **Incremental Tail Scanning**: Parses only new appended log lines in $O(\Delta)$ time, cutting background CPU usage by >85%.
 - **100% Private & Offline**: Reads only token count metadata. Your source code and prompts are never read, stored, or transmitted.
 
@@ -60,6 +63,17 @@
 ### 5. 🎯 Windows Native Notifications & Daily Budget
 - **Budget Alerts**: Set a daily token limit (e.g. 20M / 50M).
 - **Native Toast Notifications**: Non-intrusive Windows balloons alert you at **80% (Warning)** and **100% (Limit Reached)**.
+- **Start with Windows**: Optional registry-based autostart (HKCU Run key) toggled from Settings.
+
+### 6. 🏆 Developer Achievements & Trophies
+- **8 Unlockable Badges** across Bronze → Platinum tiers: *First Hatch, Night Owl Coder, Token Overclock, Multi-Tool Wizard, 100M Burn Club, Shiny Hunter, Senior Professor, Egg Hoarder* — with token/item rewards and a Trophy Cabinet tab.
+
+### 7. 🍬 Interactive Feeding & Friendship
+- **Treat Physics**: Drop Rare Candies or Oran Berries onto the desktop and watch your pet chase, munch, and sparkle.
+- **Friendship Meter**: Daily petting and treats raise affection; high friendship (≥80%) grants a +10% companion EXP boost.
+
+### 8. 📟 Compact HUD Capsule Mode
+- **Minimal 220×32px Always-On-Top Pill**: Live token burn vs daily limit (%), burn velocity (tokens/min), and hatch/evolution progress — switchable instantly from the tray menu.
 
 ---
 

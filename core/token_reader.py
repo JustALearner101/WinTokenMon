@@ -14,6 +14,8 @@ import threading
 import time
 from typing import Any
 
+from .applog import log_once
+
 
 def _read_varint(data: bytes, offset: int) -> tuple[int | None, int]:
     res = 0
@@ -227,8 +229,8 @@ class WindowsTokenReader:
                 conn.close()
                 self._cache_set(db, (st.st_mtime, st.st_size, db_entries))
                 entries.extend(db_entries)
-            except Exception:
-                pass
+            except Exception as exc:
+                log_once("scan.antigravity", f"{exc}")
         return entries
 
     def scan_claude(self) -> list[dict]:
@@ -300,8 +302,8 @@ class WindowsTokenReader:
 
                 self._cache_set(path, (st.st_mtime, final_pos, file_entries))
                 entries.extend(file_entries)
-            except Exception:
-                pass
+            except Exception as exc:
+                log_once("scan.claude", f"{exc}")
         return entries
 
     def scan_cursor(self) -> list[dict]:
@@ -398,8 +400,8 @@ class WindowsTokenReader:
                 conn.close()
                 self._cache_set(db, (st.st_mtime, st.st_size, db_entries))
                 entries.extend(db_entries)
-            except Exception:
-                pass
+            except Exception as exc:
+                log_once("scan.cursor", f"{exc}")
         return entries
 
     def scan_codex(self) -> list[dict]:
@@ -472,8 +474,8 @@ class WindowsTokenReader:
 
                 self._cache_set(path, (st.st_mtime, final_pos, file_entries))
                 entries.extend(file_entries)
-            except Exception:
-                pass
+            except Exception as exc:
+                log_once("scan.codex", f"{exc}")
         return entries
 
     def scan_copilot(self) -> list[dict]:
@@ -523,8 +525,8 @@ class WindowsTokenReader:
             conn.close()
             self._cache_set(copilot_db, (st.st_mtime, st.st_size, db_entries))
             entries.extend(db_entries)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_once("scan.copilot", f"{exc}")
         return entries
 
     @staticmethod
@@ -625,8 +627,8 @@ class WindowsTokenReader:
                                 "source": "koma",
                             }
                         )
-        except Exception:
-            pass
+        except Exception as exc:
+            log_once("scan.koma_json", f"{exc}")
         self._cache_set(path, (st.st_mtime, st.st_size, file_entries))
         return file_entries
 
@@ -729,8 +731,8 @@ class WindowsTokenReader:
                 final_pos = f.tell()
 
             self._cache_set(hist_path, (st.st_mtime, final_pos, entries))
-        except Exception:
-            pass
+        except Exception as exc:
+            log_once("scan.aider", f"{exc}")
         return entries
 
     @staticmethod
@@ -814,8 +816,8 @@ class WindowsTokenReader:
                     )
             self._cache_set(db, (st.st_mtime, st.st_size, db_entries))
             entries.extend(db_entries)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_once("scan.vscdb", f"{exc}")
         return entries
 
     def scan_windsurf(self) -> list[dict]:
@@ -924,8 +926,8 @@ class WindowsTokenReader:
                         )
                     self._cache_set(path, (st.st_mtime, st.st_size, file_entries))
                     entries.extend(file_entries)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log_once("scan.cline_roo", f"{exc}")
         return entries
 
     def get_summary(self) -> tuple[TokenUsageSummary, int]:

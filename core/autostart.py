@@ -81,5 +81,8 @@ def set_autostart(enable: bool) -> bool:
             except FileNotFoundError:
                 pass
             return True
-    except Exception:
+    except Exception as exc:
+        from .applog import log_error
+
+        log_error(f"autostart.set({enable}) failed: {exc}")
         return False
