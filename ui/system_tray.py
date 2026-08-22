@@ -60,6 +60,7 @@ class SystemTrayManager:
         on_refresh: Callable,
         on_exit: Callable,
         on_toggle_roaming: Callable | None = None,
+        on_switch_mode: Callable | None = None,
     ):
         self.store = store
         self.on_open_dashboard = on_open_dashboard
@@ -67,19 +68,36 @@ class SystemTrayManager:
         self.on_refresh = on_refresh
         self.on_exit = on_exit
         self.on_toggle_roaming = on_toggle_roaming
+        self.on_switch_mode = on_switch_mode
 
         self.icon_image = create_tray_icon_image()
         self.tray_icon = None
 
     def _build_menu(self):
+        mode_label = (
+            "🐾 Mode: Full Desktop Pet"
+            if self.store.display_mode == "compact_hud"
+            else "📊 Mode: Compact HUD Pill"
+        )
         return pystray.Menu(
             pystray.MenuItem("🐾 Open Dashboard", lambda: self.on_open_dashboard()),
             pystray.MenuItem("🔄 Force Token Refresh", lambda: self.on_refresh()),
+            pystray.MenuItem(mode_label, lambda: self.on_switch_mode()),
             pystray.MenuItem("👁️ Toggle Desktop Pet", lambda: self.on_toggle_pet()),
             pystray.MenuItem("🚶 Toggle Roaming (Walk Around)", lambda: self._toggle_roam()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("❌ Exit WinTokenMon", lambda: self.on_exit()),
         )
+
+    def refresh_mode_label(self):
+        """Rebuilds the tray menu so the display-mode label reflects current state."""
+        if not self.tray_icon:
+            return
+        try:
+            self.tray_icon.menu = self._build_menu()
+            self.tray_icon.update_menu()
+        except Exception:
+            pass
 
     def _toggle_roam(self):
         new_val = not getattr(self.store, "roaming_enabled", True)

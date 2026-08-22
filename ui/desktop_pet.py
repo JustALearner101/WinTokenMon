@@ -12,7 +12,6 @@ import random
 import time
 import tkinter as tk
 from collections.abc import Callable
-from tkinter import ttk
 
 from PIL import Image, ImageDraw, ImageSequence, ImageTk
 
@@ -205,6 +204,24 @@ def get_screen_work_area(window=None) -> tuple[int, int, int, int]:
             pass
 
     return 0, 0, 1920, 1080
+
+
+def draw_rounded_pill(canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int, r: int, color: str):
+    """Draws a rounded pill (two arcs + rectangle) for broad Tk compatibility."""
+    w = x2 - x1
+    h = y2 - y1
+    if w <= 0 or h <= 0:
+        return
+    if w < 2 * r:
+        r = max(1, w // 2)
+    if h < 2 * r:
+        r = max(1, h // 2)
+    canvas.create_arc(
+        x1, y1, x1 + 2 * r, y1 + 2 * r, start=90, extent=180, fill=color, outline=color
+    )
+    canvas.create_arc(x2 - 2 * r, y1, x2, y2, start=270, extent=180, fill=color, outline=color)
+    if x2 - r > x1 + r:
+        canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=color, outline=color)
 
 
 class DesktopPetWindow:
@@ -939,8 +956,6 @@ class DesktopPetWindow:
         else:
             sp_id = self.store.active.species_id
             shiny = self.store.active.is_shiny
-            self.current_loaded_species_id = sp_id
-            self.current_loaded_shiny = shiny
 
             sprite_path = get_sprite_path(sp_id, shiny)
             if sprite_path and os.path.exists(sprite_path):
@@ -955,6 +970,9 @@ class DesktopPetWindow:
                         f_right = f_left.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
                         self.frames_left.append(ImageTk.PhotoImage(f_left))
                         self.frames_right.append(ImageTk.PhotoImage(f_right))
+                    # Mark loaded only on success so a failed/async-pending sprite is retried
+                    self.current_loaded_species_id = sp_id
+                    self.current_loaded_shiny = shiny
                 except Exception:
                     pass
 
@@ -1094,7 +1112,15 @@ class DesktopPetWindow:
             self.anim_job = self.root.after(80, self.animate)
             return
 
-        if self.frames:
+        offsets_active = bool(
+            self._wiggle_offset_x
+            or self._step_sway_x
+            or self._step_hop_y
+            or self._bounce_offset_y
+        )
+
+        # Redraw only when something can actually change: animated sprite or active offset.
+        if self.frames and (len(self.frames) > 1 or offsets_active):
             self.frame_idx = (self.frame_idx + 1) % len(self.frames)
             self.canvas.delete("sprite")
             cx = (self.pet_size // 2) + self._wiggle_offset_x + self._step_sway_x
@@ -1111,8 +1137,8 @@ class DesktopPetWindow:
             self.anim.stop_wiggle()
             self._wiggle_offset_x = 0
 
-        # Dynamic Frame Cadence: 50ms while walking (accelerated pace), 100ms when resting
-        delay = 50 if self._roam_state == "walking" else 100
+        # Dynamic Frame Cadence: 50ms while walking or mid-animation, 250ms when resting
+        delay = 50 if (self._roam_state == "walking" or offsets_active) else 250
         self.anim_job = self.root.after(delay, self.animate)
 
     def _set_wiggle_offset(self, offset: int):
@@ -1211,26 +1237,6 @@ class DesktopPetWindow:
 
         self._schedule_next_roam(4000)
 
-    def _draw_pill(
-        self, canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int, r: int, color: str
-    ):
-        w = x2 - x1
-        h = y2 - y1
-        if w <= 0 or h <= 0:
-            return
-        if w < 2 * r:
-            r = max(1, w // 2)
-        if h < 2 * r:
-            r = max(1, h // 2)
-        canvas.create_arc(
-            x1, y1, x1 + 2 * r, y1 + 2 * r, start=90, extent=180, fill=color, outline=color
-        )
-        canvas.create_arc(
-            x2 - 2 * r, y1, x2, y2, start=270, extent=180, fill=color, outline=color
-        )
-        if x2 - r > x1 + r:
-            canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=color, outline=color)
-
     def _draw_progress_bar(self, pct: float, fill_color: str, bg_color: str = "#313244"):
         if not self.progress_canvas or not self.progress_canvas.winfo_exists():
             return
@@ -1244,7 +1250,7 @@ class DesktopPetWindow:
         r = h // 2
 
         # Background trough
-        self._draw_pill(self.progress_canvas, 0, 0, w, h, r, bg_color)
+        draw_rounded_pill(self.progress_canvas, 0, 0, w, h, r, bg_color)
 
         # Progress fill
         clamped_pct = min(100.0, max(0.0, pct))
@@ -1252,7 +1258,7 @@ class DesktopPetWindow:
         if fill_w > 0:
             fill_w = max(fill_w, h)
             fill_w = min(fill_w, w)
-            self._draw_pill(self.progress_canvas, 0, 0, fill_w, h, r, fill_color)
+            draw_rounded_pill(self.progress_canvas, 0, 0, fill_w, h, r, fill_color)
 
     def show_bubble(self, event=None):
         self.pause_roaming()

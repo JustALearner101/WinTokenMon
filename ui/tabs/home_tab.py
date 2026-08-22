@@ -21,6 +21,7 @@ from ui.dashboard_theme import (
     get_pokemon_element_type,
 )
 from ui.desktop_pet import create_egg_image, format_tokens
+from ui.modals.evolution_modal import EvolutionModal
 from ui.modals.nature_modal import NatureSelectorModal
 
 
@@ -31,6 +32,8 @@ class HomeTabView:
         self.parent = parent
         self.dashboard = dashboard
         self.store: CompanionStore = dashboard.store
+        self._last_signature: tuple | None = None
+        self._egg_img: ctk.CTkImage | None = None
 
         self._build_ui()
 
@@ -195,6 +198,16 @@ class HomeTabView:
 
         self.progress_bar = ctk.CTkProgressBar(self.card_companion, height=10, corner_radius=5)
         self.progress_bar.pack(fill="x", padx=12, pady=(0, 6))
+
+        self.btn_evolve_ready = ctk.CTkButton(
+            self.card_companion,
+            text="✨ Ready to Evolve! Click to Evolve ✨",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#D97706",
+            hover_color="#B45309",
+            height=32,
+            command=self.action_trigger_evolution_ceremony,
+        )
 
         # Daily Activity Gauge
         self.lbl_stamina_text = ctk.CTkLabel(
@@ -408,7 +421,46 @@ class HomeTabView:
         elem = get_pokemon_element_type(self.store.active.species_id)
         return TYPE_THEMES.get(elem, TYPE_THEMES["normal"])
 
+    def _view_signature(self) -> tuple:
+        """Snapshot of every datum rendered by refresh(); used to skip no-op redraws."""
+        store = self.store
+        act = None if store.is_egg or not store.active else store.active
+        return (
+            store.is_egg,
+            (
+                act.species_id,
+                act.is_shiny,
+                act.stage_index,
+                act.used_at_stage,
+                act.friendship,
+            )
+            if act
+            else None,
+            store.egg_usage,
+            store.current_threshold,
+            len(store.pokedex),
+            store.daily_token_limit,
+            self.summary.today_tokens,
+            self.summary.today_input,
+            self.summary.today_output,
+            self.summary.today_cache,
+            self.summary.rolling_5h_tokens,
+            self.summary.weekly_tokens,
+            self.summary.lifetime_tokens,
+            tuple(sorted(self.summary.by_source.items())),
+            tuple(sorted(store.daily_history.items())),
+            tuple(sorted(store.inventory.items())),
+            "100m_burn_club" in store.unlocked_achievements,
+            store.is_ready_to_evolve,
+            bool(store.next_species_info),
+        )
+
     def refresh(self):
+        signature = self._view_signature()
+        if signature == self._last_signature:
+            return  # nothing drawn here changed; skip the widget teardown/rebuild
+        self._last_signature = signature
+
         theme = self._get_active_theme()
 
         # Update Trainer Ribbon
@@ -449,8 +501,9 @@ class HomeTabView:
             self.lbl_stage_pill.configure(text=f"Tier: {self.store.egg_tier.value.capitalize()}")
             self.lbl_nature_pill.configure(text="Egg Incubation", text_color="#9CA3AF")
 
-            egg_img = ctk.CTkImage(create_egg_image((100, 100)), size=(100, 100))
-            self.lbl_sprite.configure(image=egg_img)
+            if self._egg_img is None:
+                self._egg_img = ctk.CTkImage(create_egg_image((100, 100)), size=(100, 100))
+            self.lbl_sprite.configure(image=self._egg_img)
 
             self.lbl_lore_quote.configure(
                 text="“An enigmatic Pokémon egg. Walk, code, and burn tokens to help it hatch into a new companion!”"
@@ -476,6 +529,7 @@ class HomeTabView:
             self.btn_use_candy.configure(state="disabled")
             self.btn_use_berry.configure(state="disabled")
             self.btn_use_mint.configure(state="disabled")
+            self.btn_evolve_ready.pack_forget()
         else:
             act = self.store.active
             shiny_str = " ✨" if act.is_shiny else ""
@@ -544,6 +598,18 @@ class HomeTabView:
                 else ("Affectionate" if act.friendship >= 50 else "Timid")
             )
             self.lbl_friendship_text.configure(text=f"💖 Affection: {act.friendship}% • {f_badge}")
+
+            # Evolution Ready Button State
+            if self.store.is_ready_to_evolve and self.store.next_species_info:
+                next_id, next_name = self.store.next_species_info
+                self.btn_evolve_ready.configure(
+                    text=f"✨ Ready to Evolve into {next_name}! Click to Evolve ✨"
+                )
+                self.btn_evolve_ready.pack(
+                    fill="x", padx=12, pady=(0, 8), before=self.lbl_stamina_text
+                )
+            else:
+                self.btn_evolve_ready.pack_forget()
 
             self.btn_use_candy.configure(state="normal")
             self.btn_use_berry.configure(state="normal")
@@ -739,37 +805,31 @@ class HomeTabView:
                     font=("Segoe UI", 7, "bold"),
                 )
 
-    def action_use_candy(self):
-        if self.store.use_item(ItemKind.RARE_CANDY):
-            play_sfx_levelup(0.6)
-            self.dashboard.show_toast("🍬 Fed Rare Candy! +100M Token EXP & +15% Affection!")
+    def _use_treat(self, item: ItemKind, success_msg: str, fail_msg: str):
+        if self.store.use_item(item):
+            play_sfx_levelup(0.6 if item == ItemKind.RARE_CANDY else 0.5)
+            self.dashboard.show_toast(success_msg)
             self.refresh()
             self.dashboard.refresh_pokedex_tab()
             self.dashboard.refresh_shop_tab()
             if self.dashboard.on_update_callback:
                 self.dashboard.on_update_callback()
         else:
-            self.dashboard.show_toast(
-                "❌ No Rare Candies left in Bag! Buy one from Shop.",
-                bg_color="#E74C3C",
-                text_color="#FFF",
-            )
+            self.dashboard.show_toast(fail_msg, bg_color="#E74C3C", text_color="#FFF")
+
+    def action_use_candy(self):
+        self._use_treat(
+            ItemKind.RARE_CANDY,
+            "🍬 Fed Rare Candy! +100M Token EXP & +15% Affection!",
+            "❌ No Rare Candies left in Bag! Buy one from Shop.",
+        )
 
     def action_use_berry(self):
-        if self.store.use_item(ItemKind.ORAN_BERRY):
-            play_sfx_levelup(0.5)
-            self.dashboard.show_toast("🫐 Fed Oran Berry! +10M Token EXP & +10% Affection!")
-            self.refresh()
-            self.dashboard.refresh_pokedex_tab()
-            self.dashboard.refresh_shop_tab()
-            if self.dashboard.on_update_callback:
-                self.dashboard.on_update_callback()
-        else:
-            self.dashboard.show_toast(
-                "❌ No Oran Berries left in Bag! Buy one from Shop.",
-                bg_color="#E74C3C",
-                text_color="#FFF",
-            )
+        self._use_treat(
+            ItemKind.ORAN_BERRY,
+            "🫐 Fed Oran Berry! +10M Token EXP & +10% Affection!",
+            "❌ No Oran Berries left in Bag! Buy one from Shop.",
+        )
 
     def action_open_mint_picker(self):
         mints = self.store.inventory.get(ItemKind.MINT.value, 0)
@@ -790,3 +850,19 @@ class HomeTabView:
                     self.dashboard.on_update_callback()
 
         NatureSelectorModal(self.dashboard.win, on_pick)
+
+    def action_trigger_evolution_ceremony(self):
+        next_info = self.store.next_species_info
+        if not next_info or not self.store.active:
+            return
+        next_id, next_name = next_info
+        EvolutionModal(
+            self.parent,
+            self.store,
+            old_species_id=self.store.active.species_id,
+            old_species_name=self.store.active.species_name,
+            new_species_id=next_id,
+            new_species_name=next_name,
+            is_shiny=self.store.active.is_shiny,
+            on_complete=self.refresh,
+        )

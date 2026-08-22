@@ -3,7 +3,9 @@ WinTokenMon for Windows — Main Entry Point
 """
 
 import os
+import queue
 import sys
+import threading
 import time
 import traceback
 
@@ -23,14 +25,6 @@ if sys.platform.startswith("win"):
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
-
-# Load developer environment variables from .env if present
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(os.path.join(ROOT_DIR, ".env"))
-except ImportError:
-    pass
 
 DEBUG_MODE = os.environ.get("WINTOKENMON_DEBUG", "0").lower() in ("1", "true", "yes")
 POLL_INTERVAL_MS = int(os.environ.get("WINTOKENMON_POLL_INTERVAL", "10")) * 1000
@@ -65,6 +59,7 @@ try:
     from core.audio_manager import play_sfx_achievement
     from core.companion_store import CompanionStore
     from core.token_reader import TokenUsageSummary, WindowsTokenReader
+    from ui.compact_hud import CompactHUDWindow
     from ui.dashboard import DashboardWindow
     from ui.desktop_pet import DesktopPetWindow
     from ui.starter_modal import StarterSelectionModal
@@ -85,30 +80,50 @@ class WinTokenMonApp:
             self.summary = TokenUsageSummary()
             self.dashboard_window = None
             self.starter_modal = None
+            self.compact_hud = None
+
+            # Velocity sampler: (timestamp, today_tokens) rolling window (worker-thread only)
+            self.velocity_samples: list[tuple[float, int]] = []
+            self._last_velocity: float = 0.0
+
+            # Scanner worker thread plumbing: worker scans on disk/network,
+            # results are handed to the UI thread via a small queue.
+            self._scan_wake = threading.Event()
+            self._scan_results: queue.Queue[tuple] = queue.Queue(maxsize=2)
+
+            # Apply saved provider toggles to the scanner engine
+            self.reader.enabled_sources = {
+                src for src, on in self.store.tracked_providers.items() if on
+            }
 
             # Create Desktop Pet Window (Tkinter mainloop driver)
             self.pet = DesktopPetWindow(self.store, on_open_dashboard=self.open_dashboard)
+
+            # Create Compact HUD capsule (hidden unless display_mode == compact_hud)
+            self.compact_hud = CompactHUDWindow(self.store, on_switch_mode=self.toggle_display_mode)
+            if self.store.display_mode != "compact_hud":
+                self.compact_hud.hide()
 
             # Create System Tray
             self.tray = SystemTrayManager(
                 store=self.store,
                 on_open_dashboard=self.open_dashboard,
                 on_toggle_pet=self.toggle_pet,
-                on_refresh=self.poll_tokens_now,
+                on_refresh=self.request_scan,
                 on_exit=self.exit_app,
                 on_toggle_roaming=self.on_roaming_toggled,
+                on_switch_mode=self.toggle_display_mode,
             )
             self.tray.start()
 
-            # Initial token read
-            self.poll_tokens_now()
+            # Start background scanner worker + UI result pump
+            threading.Thread(target=self._scanner_loop, daemon=True).start()
+            self.request_scan()
+            self.pet.root.after(250, self._pump_scan_results)
 
             # If starter not chosen yet on first launch, open starter selection wizard
             if not self.store.starter_chosen:
                 self.pet.root.after(300, self.open_starter_selection)
-
-            # Schedule recurring background poll (every 10s or custom interval)
-            self.schedule_poll()
         except Exception:
             log_error(f"Init Error: {traceback.format_exc()}")
             raise
@@ -201,14 +216,60 @@ class WinTokenMonApp:
 
         self.pet.root.after(0, _toggle)
 
-    def on_state_updated(self):
-        self.pet.refresh_state(self.summary)
-        self.tray.update_tooltip(self.summary)
+    @tk_safe
+    def toggle_display_mode(self):
+        """Switches between Full Desktop Pet mode and Compact HUD pill mode."""
+        if self.store.display_mode == "compact_hud":
+            self.store.display_mode = "full_pet"
+            self.compact_hud.hide()
+            self.pet.root.deiconify()
+            self.pet.refresh_state(self.summary)
+        else:
+            self.store.display_mode = "compact_hud"
+            self.pet.root.withdraw()
+            self.pet.hide_bubble()
+            self.compact_hud.show()
+            self.compact_hud.update_metrics(self.summary, self._last_velocity)
+        self.tray.refresh_mode_label()
+        self.store.save()
+
+    # ─────────────────────────────────────────────────────────────────────
+    # BACKGROUND SCANNER WORKER (disk/network I/O stays off the UI thread)
+    # ─────────────────────────────────────────────────────────────────────
+    def request_scan(self):
+        """Wakes the scanner worker for an immediate poll. Safe from any thread."""
+        self._scan_wake.set()
+
+    def _scanner_loop(self):
+        """Worker loop: scans all token sources, hands results to the UI queue."""
+        while True:
+            self._scan_wake.wait(POLL_INTERVAL_MS / 1000.0)
+            self._scan_wake.clear()
+            try:
+                summary, delta = self.reader.get_summary()
+                velocity = self._compute_velocity(summary.today_tokens)
+                try:
+                    self._scan_results.put_nowait((summary, delta, velocity))
+                except queue.Full:
+                    pass  # UI lagging behind; drop stale scan
+            except Exception:
+                log_error(f"Scanner Error: {traceback.format_exc()}")
+
+    def _pump_scan_results(self):
+        """Drains scanner results on the UI thread and applies them to all views."""
+        try:
+            while True:
+                summary, delta, velocity = self._scan_results.get_nowait()
+                self._apply_scan_results(summary, delta, velocity)
+        except queue.Empty:
+            pass
+        self.pet.root.after(250, self._pump_scan_results)
 
     @tk_safe
-    def poll_tokens_now(self):
-        summary, delta = self.reader.get_summary()
+    def _apply_scan_results(self, summary, delta: int, velocity: float):
         self.summary = summary
+        self._last_velocity = velocity
+
         if delta > 0:
             self.store.add_tokens(delta)
 
@@ -228,18 +289,46 @@ class WinTokenMonApp:
             self.tray.send_notification(title, msg)
 
         # Update UI components
-        self.pet.refresh_state(self.summary)
+        if self.store.display_mode == "compact_hud":
+            self.compact_hud.update_metrics(self.summary, velocity)
+        else:
+            self.pet.refresh_state(self.summary)
         self.tray.update_tooltip(self.summary)
         if self.dashboard_window and self.dashboard_window.win.winfo_exists():
             self.dashboard_window.update_summary(self.summary)
 
-    def schedule_poll(self):
-        self.poll_tokens_now()
-        self.pet.root.after(POLL_INTERVAL_MS, self.schedule_poll)
+    def _compute_velocity(self, today_tokens: int) -> float:
+        """Computes tokens/min burn velocity from a rolling 5-minute sample window.
+        Only called from the scanner worker thread."""
+        now = time.time()
+        self.velocity_samples.append((now, today_tokens))
+        # Keep only the last 5 minutes of samples
+        cutoff = now - 300
+        self.velocity_samples = [(ts, tok) for ts, tok in self.velocity_samples if ts >= cutoff]
+        if len(self.velocity_samples) < 2:
+            return 0.0
+        oldest_ts, oldest_tok = self.velocity_samples[0]
+        elapsed_min = (now - oldest_ts) / 60.0
+        if elapsed_min <= 0:
+            return 0.0
+        return max(0, today_tokens - oldest_tok) / elapsed_min
+
+    def on_state_updated(self):
+        # Re-sync scanner filters in case provider toggles changed
+        self.reader.enabled_sources = {
+            src for src, on in self.store.tracked_providers.items() if on
+        }
+        if self.store.display_mode != "compact_hud":
+            self.pet.refresh_state(self.summary)
+        else:
+            self.compact_hud.update_metrics(self.summary, self._last_velocity)
+        self.tray.update_tooltip(self.summary)
 
     def exit_app(self):
         try:
             self.tray.stop()
+            if self.compact_hud:
+                self.compact_hud.destroy()
             self.pet.destroy()
         except Exception:
             pass
@@ -251,13 +340,6 @@ class WinTokenMonApp:
         except Exception:
             log_error(f"Mainloop Error: {traceback.format_exc()}")
             raise
-
-    def __del__(self):
-        try:
-            if hasattr(self, "tray") and self.tray:
-                self.tray.stop()
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":

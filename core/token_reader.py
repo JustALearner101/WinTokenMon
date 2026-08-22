@@ -1,13 +1,16 @@
 """
 Universal local AI token reader for Windows
-Supports: Antigravity CLI, Claude Code, Cursor IDE, Codex CLI, GitHub Copilot CLI
+Supports: Antigravity CLI, Claude Code, Cursor IDE, Codex CLI, GitHub Copilot CLI,
+Koma, Aider, Windsurf (Cascade), Roo Code, and Cline (VS Code)
 """
 
 import datetime
 import glob
 import json
 import os
+import re
 import sqlite3
+import threading
 import time
 from typing import Any
 
@@ -128,6 +131,29 @@ def _parse_flexible_date(val: Any) -> float | None:
     return None
 
 
+def _parse_token_number(val: str) -> int | None:
+    """Parses '1,234', '5.4k', '2m' style token counts into plain integers."""
+    val = val.strip().replace(",", "").lower()
+    if not val:
+        return None
+    mult = 1
+    if val.endswith("k"):
+        mult, val = 1000, val[:-1]
+    elif val.endswith("m"):
+        mult, val = 1_000_000, val[:-1]
+    try:
+        return int(float(val) * mult)
+    except Exception:
+        return None
+
+
+_AIDER_TOKENS_RE = re.compile(
+    r"tokens?:\s*([\d.,]+\s*[km]?)\s*sent\s*,?\s*([\d.,]+\s*[km]?)\s*received",
+    re.IGNORECASE,
+)
+_AIDER_FALLBACK_RE = re.compile(r"tokens?:\s*([\d.,]+[km]?)", re.IGNORECASE)
+
+
 class TokenUsageSummary:
     def __init__(self):
         self.today_tokens: int = 0
@@ -152,7 +178,17 @@ class WindowsTokenReader:
         self.file_cache: dict[
             str, tuple[float, int, list[dict]]
         ] = {}  # path -> (mtime, size, entries)
+        self._cache_lock = threading.Lock()
         self.last_total_tokens: int | None = None
+        self.enabled_sources: set[str] | None = None  # None = all sources enabled
+
+    def _cache_get(self, path: str) -> tuple[float, int, list[dict]] | None:
+        with self._cache_lock:
+            return self.file_cache.get(path)
+
+    def _cache_set(self, path: str, value: tuple[float, int, list[dict]]):
+        with self._cache_lock:
+            self.file_cache[path] = value
 
     def scan_antigravity(self) -> list[dict]:
         entries = []
@@ -161,7 +197,7 @@ class WindowsTokenReader:
         for db in dbs:
             try:
                 st = os.stat(db)
-                cached = self.file_cache.get(db)
+                cached = self._cache_get(db)
                 if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
                     entries.extend(cached[2])
                     continue
@@ -189,7 +225,7 @@ class WindowsTokenReader:
                                 }
                             )
                 conn.close()
-                self.file_cache[db] = (st.st_mtime, st.st_size, db_entries)
+                self._cache_set(db, (st.st_mtime, st.st_size, db_entries))
                 entries.extend(db_entries)
             except Exception:
                 pass
@@ -205,7 +241,7 @@ class WindowsTokenReader:
         for path in jsonl_files:
             try:
                 st = os.stat(path)
-                cached = self.file_cache.get(path)
+                cached = self._cache_get(path)
                 if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
                     entries.extend(cached[2])
                     continue
@@ -262,7 +298,7 @@ class WindowsTokenReader:
                             continue
                     final_pos = f.tell()
 
-                self.file_cache[path] = (st.st_mtime, final_pos, file_entries)
+                self._cache_set(path, (st.st_mtime, final_pos, file_entries))
                 entries.extend(file_entries)
             except Exception:
                 pass
@@ -286,7 +322,7 @@ class WindowsTokenReader:
         for db in db_paths:
             try:
                 st = os.stat(db)
-                cached = self.file_cache.get(db)
+                cached = self._cache_get(db)
                 if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
                     entries.extend(cached[2])
                     continue
@@ -360,7 +396,7 @@ class WindowsTokenReader:
                             continue
 
                 conn.close()
-                self.file_cache[db] = (st.st_mtime, st.st_size, db_entries)
+                self._cache_set(db, (st.st_mtime, st.st_size, db_entries))
                 entries.extend(db_entries)
             except Exception:
                 pass
@@ -376,7 +412,7 @@ class WindowsTokenReader:
         for path in jsonl_files:
             try:
                 st = os.stat(path)
-                cached = self.file_cache.get(path)
+                cached = self._cache_get(path)
                 if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
                     entries.extend(cached[2])
                     continue
@@ -434,7 +470,7 @@ class WindowsTokenReader:
                             continue
                     final_pos = f.tell()
 
-                self.file_cache[path] = (st.st_mtime, final_pos, file_entries)
+                self._cache_set(path, (st.st_mtime, final_pos, file_entries))
                 entries.extend(file_entries)
             except Exception:
                 pass
@@ -448,7 +484,7 @@ class WindowsTokenReader:
 
         try:
             st = os.stat(copilot_db)
-            cached = self.file_cache.get(copilot_db)
+            cached = self._cache_get(copilot_db)
             if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
                 return cached[2]
 
@@ -485,11 +521,114 @@ class WindowsTokenReader:
                             }
                         )
             conn.close()
-            self.file_cache[copilot_db] = (st.st_mtime, st.st_size, db_entries)
+            self._cache_set(copilot_db, (st.st_mtime, st.st_size, db_entries))
             entries.extend(db_entries)
         except Exception:
             pass
         return entries
+
+    @staticmethod
+    def _koma_usage(obj: dict) -> tuple[int, int, int]:
+        """Extracts (input, output, cache) from a Koma usage object with key fallbacks."""
+        inp = obj.get("input_tokens", 0) or obj.get("prompt_tokens", 0) or 0
+        out = obj.get("output_tokens", 0) or obj.get("completion_tokens", 0) or 0
+        cache = obj.get("cache_read_input_tokens", 0) or obj.get("cached_tokens", 0) or 0
+        return inp, out, cache
+
+    def _scan_koma_jsonl(self, path: str, st: os.stat_result, cached) -> list[dict]:
+        """Incrementally parses new lines of a Koma .jsonl session log."""
+        if cached and st.st_size > cached[1]:
+            file_entries = list(cached[2])
+            seek_pos = cached[1]
+        else:
+            file_entries = []
+            seek_pos = 0
+
+        filename = os.path.basename(path)
+        turn = len(file_entries)
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            if seek_pos > 0:
+                f.seek(seek_pos)
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    usage = data.get("usage") or data.get("token_usage") or data
+                    inp, out, cache = self._koma_usage(usage)
+                    tot = inp + out + cache
+                    if tot > 0:
+                        ts = (
+                            _parse_flexible_date(data.get("timestamp") or data.get("created_at"))
+                            or st.st_mtime
+                        )
+                        file_entries.append(
+                            {
+                                "id": f"koma|{filename}|{turn}|{tot}",
+                                "ts": ts,
+                                "tokens": tot,
+                                "input": inp,
+                                "output": out,
+                                "cache": cache,
+                                "source": "koma",
+                            }
+                        )
+                        turn += 1
+                except Exception:
+                    continue
+            final_pos = f.tell()
+
+        self._cache_set(path, (st.st_mtime, final_pos, file_entries))
+        return file_entries
+
+    def _scan_koma_json(self, path: str, st: os.stat_result) -> list[dict]:
+        """Parses a single Koma .json session/ledger file."""
+        file_entries = []
+        filename = os.path.basename(path)
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                data = json.load(f)
+                items = (
+                    data
+                    if isinstance(data, list)
+                    else data.get("messages", [])
+                    or data.get("turns", [])
+                    or data.get("sessions", [])
+                    or [data]
+                )
+                for idx, item in enumerate(items):
+                    usage = (
+                        item.get("usage")
+                        or item.get("token_usage")
+                        or item.get("stats", {})
+                        or item
+                    )
+                    inp, out, cache = self._koma_usage(usage)
+                    tot = inp + out + cache
+                    if tot > 0:
+                        ts = (
+                            _parse_flexible_date(
+                                item.get("timestamp")
+                                or item.get("created_at")
+                                or data.get("created_at")
+                            )
+                            or st.st_mtime
+                        )
+                        file_entries.append(
+                            {
+                                "id": f"koma|{filename}|{idx}|{tot}",
+                                "ts": ts,
+                                "tokens": tot,
+                                "input": inp,
+                                "output": out,
+                                "cache": cache,
+                                "source": "koma",
+                            }
+                        )
+        except Exception:
+            pass
+        self._cache_set(path, (st.st_mtime, st.st_size, file_entries))
+        return file_entries
 
     def scan_koma(self) -> list[dict]:
         """Scans Koma (aula-id/koma) AI agent sessions and token ledgers."""
@@ -512,147 +651,312 @@ class WindowsTokenReader:
             for path in json_files:
                 try:
                     st = os.stat(path)
-                    cached = self.file_cache.get(path)
+                    cached = self._cache_get(path)
+                    if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+                        entries.extend(cached[2])
+                    elif path.endswith(".jsonl"):
+                        entries.extend(self._scan_koma_jsonl(path, st, cached))
+                    else:
+                        entries.extend(self._scan_koma_json(path, st))
+                except Exception:
+                    pass
+        return entries
+
+    def scan_aider(self) -> list[dict]:
+        """Scans Aider markdown chat history (~/.aider.chat.history.md) for token usage lines."""
+        entries = []
+        hist_path = os.path.join(self.home, ".aider.chat.history.md")
+        if not os.path.exists(hist_path):
+            return entries
+
+        try:
+            st = os.stat(hist_path)
+            cached = self._cache_get(hist_path)
+            if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+                return cached[2]
+
+            if cached and st.st_size > cached[1]:
+                entries = list(cached[2])
+                seek_pos = cached[1]
+            else:
+                entries = []
+                seek_pos = 0
+
+            ts = st.st_mtime
+            turn = len(entries)
+            with open(hist_path, encoding="utf-8", errors="ignore") as f:
+                if seek_pos > 0:
+                    f.seek(seek_pos)
+                for line in f:
+                    low = line.lower()
+                    # Track session date headers for accurate timestamps
+                    if "aider chat started at" in low or "aider v" in low and "started" in low:
+                        date_str = line.split("at", 1)[1].strip() if " at " in low else ""
+                        try:
+                            dt = datetime.datetime.strptime(
+                                date_str.split(".")[0].strip(), "%Y-%m-%d %H:%M:%S"
+                            )
+                            ts = dt.timestamp()
+                        except Exception:
+                            pass
+                        continue
+
+                    m = _AIDER_TOKENS_RE.search(low)
+                    inp = out = None
+                    if m:
+                        inp = _parse_token_number(m.group(1))
+                        out = _parse_token_number(m.group(2))
+                    else:
+                        fb = _AIDER_FALLBACK_RE.search(low)
+                        if fb:
+                            out = _parse_token_number(fb.group(1))
+                    if not (inp or out):
+                        continue
+                    tot = (inp or 0) + (out or 0)
+                    if tot > 0:
+                        entries.append(
+                            {
+                                "id": f"aider|{hist_path}|{turn}|{tot}",
+                                "ts": ts,
+                                "tokens": tot,
+                                "input": inp or 0,
+                                "output": out or 0,
+                                "cache": 0,
+                                "source": "aider",
+                            }
+                        )
+                        turn += 1
+                final_pos = f.tell()
+
+            self._cache_set(hist_path, (st.st_mtime, final_pos, entries))
+        except Exception:
+            pass
+        return entries
+
+    @staticmethod
+    def _collect_usage_objects(obj: Any, found: list[tuple[int, int, int]]):
+        """Recursively collects usage tuples (input, output, cache) from nested JSON blobs."""
+        if isinstance(obj, dict):
+            inp = (
+                obj.get("inputTokens")
+                or obj.get("input_tokens")
+                or obj.get("promptTokens")
+                or obj.get("prompt_tokens")
+                or obj.get("tokensIn")
+                or 0
+            )
+            out = (
+                obj.get("outputTokens")
+                or obj.get("output_tokens")
+                or obj.get("completionTokens")
+                or obj.get("completion_tokens")
+                or obj.get("tokensOut")
+                or 0
+            )
+            cache_fields = (
+                obj.get("cacheReads"),
+                obj.get("cache_read_input_tokens"),
+                obj.get("cached_tokens"),
+                obj.get("cacheReadInputTokens"),
+                obj.get("cacheWrites"),
+                obj.get("cache_creation_input_tokens"),
+                obj.get("cacheWriteInputTokens"),
+            )
+            cache = sum(int(v or 0) for v in cache_fields if isinstance(v, (int, float)))
+            if isinstance(inp, (int, float)) or isinstance(out, (int, float)):
+                i, o, c = int(inp or 0), int(out or 0), cache
+                if i + o + c > 0:
+                    found.append((i, o, c))
+            for v in obj.values():
+                WindowsTokenReader._collect_usage_objects(v, found)
+        elif isinstance(obj, list):
+            for v in obj:
+                WindowsTokenReader._collect_usage_objects(v, found)
+
+    def _scan_vscdb(self, db: str, source: str) -> list[dict]:
+        """Generic non-locking scanner for VS Code-style state.vscdb databases."""
+        entries = []
+        conv_id = os.path.basename(os.path.dirname(db))
+        try:
+            st = os.stat(db)
+            cached = self._cache_get(db)
+            if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+                return cached[2]
+
+            db_entries = []
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=1)
+            c = conn.cursor()
+            c.execute("SELECT key, value FROM ItemTable")
+            rows = c.fetchall()
+            conn.close()
+
+            for key, val in rows:
+                if isinstance(val, bytes):
+                    val = val.decode("utf-8", errors="ignore")
+                try:
+                    obj = json.loads(val)
+                except Exception:
+                    continue
+                found: list[tuple[int, int, int]] = []
+                self._collect_usage_objects(obj, found)
+                for idx, (inp, out, cache) in enumerate(found):
+                    tot = inp + out + cache
+                    db_entries.append(
+                        {
+                            "id": f"{source}|{conv_id}|{key}|{idx}",
+                            "ts": st.st_mtime,
+                            "tokens": tot,
+                            "input": inp,
+                            "output": out,
+                            "cache": cache,
+                            "source": source,
+                        }
+                    )
+            self._cache_set(db, (st.st_mtime, st.st_size, db_entries))
+            entries.extend(db_entries)
+        except Exception:
+            pass
+        return entries
+
+    def scan_windsurf(self) -> list[dict]:
+        """Scans Windsurf (Cascade) workspace storage SQLite DBs with a 24h mtime pre-filter."""
+        entries = []
+        ws_root = os.path.join(self.appdata, "Windsurf", "User", "workspaceStorage")
+        if not os.path.isdir(ws_root):
+            return entries
+
+        now = time.time()
+        for folder_name in os.listdir(ws_root):
+            folder_path = os.path.join(ws_root, folder_name)
+            db = os.path.join(folder_path, "state.vscdb")
+            if not os.path.isfile(db):
+                continue
+            try:
+                # Fast filter: skip project folders untouched in the last 24 hours
+                if now - os.path.getmtime(folder_path) > 86400:
+                    continue
+            except Exception:
+                continue
+            entries.extend(self._scan_vscdb(db, "windsurf"))
+        return entries
+
+    def scan_cline_and_roo(self) -> list[dict]:
+        """Scans Cline & Roo Code JSON session logs from VS Code globalStorage task folders."""
+        entries = []
+        roots = [
+            (
+                "cline",
+                os.path.join(
+                    self.appdata, "Code", "User", "globalStorage", "saoudrizwan.claude-dev"
+                ),
+            ),
+            (
+                "roo",
+                os.path.join(
+                    self.appdata, "Code", "User", "globalStorage", "rooveterinaryinc.roo-cline"
+                ),
+            ),
+            (
+                "cline",
+                os.path.join(
+                    self.appdata,
+                    "Code - Insiders",
+                    "User",
+                    "globalStorage",
+                    "saoudrizwan.claude-dev",
+                ),
+            ),
+            (
+                "roo",
+                os.path.join(
+                    self.appdata,
+                    "Code - Insiders",
+                    "User",
+                    "globalStorage",
+                    "rooveterinaryinc.roo-cline",
+                ),
+            ),
+        ]
+        for source, root in roots:
+            tasks_dir = os.path.join(root, "tasks")
+            if not os.path.isdir(tasks_dir):
+                continue
+
+            json_files = glob.glob(os.path.join(tasks_dir, "**", "*.json"), recursive=True)
+            for path in json_files:
+                basename = os.path.basename(path).lower()
+                # Only parse conversation histories; skip checkpoints/metadata noise
+                if "api_conversation_history" not in basename and "ui_messages" not in basename:
+                    continue
+                try:
+                    st = os.stat(path)
+                    cached = self._cache_get(path)
                     if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
                         entries.extend(cached[2])
                         continue
 
                     file_entries = []
-                    filename = os.path.basename(path)
+                    # Task folder names are epoch-milliseconds timestamps
+                    base_ts = st.st_mtime
+                    try:
+                        base_ts = float(os.path.basename(os.path.dirname(path))) / 1000.0
+                    except Exception:
+                        pass
 
-                    if path.endswith(".jsonl"):
-                        if cached and st.st_size > cached[1]:
-                            file_entries = list(cached[2])
-                            seek_pos = cached[1]
-                        else:
-                            file_entries = []
-                            seek_pos = 0
+                    with open(path, encoding="utf-8", errors="ignore") as f:
+                        data = json.load(f)
 
-                        turn = len(file_entries)
-                        with open(path, encoding="utf-8", errors="ignore") as f:
-                            if seek_pos > 0:
-                                f.seek(seek_pos)
-                            for line in f:
-                                if not line.strip():
-                                    continue
-                                try:
-                                    data = json.loads(line)
-                                    usage = data.get("usage") or data.get("token_usage") or data
-                                    in_tok = (
-                                        usage.get("input_tokens", 0)
-                                        or usage.get("prompt_tokens", 0)
-                                        or 0
-                                    )
-                                    out_tok = (
-                                        usage.get("output_tokens", 0)
-                                        or usage.get("completion_tokens", 0)
-                                        or 0
-                                    )
-                                    cache_tok = (
-                                        usage.get("cache_read_input_tokens", 0)
-                                        or usage.get("cached_tokens", 0)
-                                        or 0
-                                    )
-                                    tot = in_tok + out_tok + cache_tok
-                                    if tot > 0:
-                                        ts = (
-                                            _parse_flexible_date(
-                                                data.get("timestamp") or data.get("created_at")
-                                            )
-                                            or st.st_mtime
-                                        )
-                                        file_entries.append(
-                                            {
-                                                "id": f"koma|{filename}|{turn}|{tot}",
-                                                "ts": ts,
-                                                "tokens": tot,
-                                                "input": in_tok,
-                                                "output": out_tok,
-                                                "cache": cache_tok,
-                                                "source": "koma",
-                                            }
-                                        )
-                                        turn += 1
-                                except Exception:
-                                    continue
-                            final_pos = f.tell()
-
-                        self.file_cache[path] = (st.st_mtime, final_pos, file_entries)
-                        entries.extend(file_entries)
-                    else:
-                        # Standard JSON
-                        with open(path, encoding="utf-8", errors="ignore") as f:
-                            try:
-                                data = json.load(f)
-                                items = (
-                                    data
-                                    if isinstance(data, list)
-                                    else data.get("messages", [])
-                                    or data.get("turns", [])
-                                    or data.get("sessions", [])
-                                    or [data]
-                                )
-                                for idx, item in enumerate(items):
-                                    usage = (
-                                        item.get("usage")
-                                        or item.get("token_usage")
-                                        or item.get("stats", {})
-                                        or item
-                                    )
-                                    in_tok = (
-                                        usage.get("input_tokens", 0)
-                                        or usage.get("prompt_tokens", 0)
-                                        or 0
-                                    )
-                                    out_tok = (
-                                        usage.get("output_tokens", 0)
-                                        or usage.get("completion_tokens", 0)
-                                        or 0
-                                    )
-                                    cache_tok = (
-                                        usage.get("cache_read_input_tokens", 0)
-                                        or usage.get("cached_tokens", 0)
-                                        or 0
-                                    )
-                                    tot = in_tok + out_tok + cache_tok
-                                    if tot > 0:
-                                        ts = (
-                                            _parse_flexible_date(
-                                                item.get("timestamp")
-                                                or item.get("created_at")
-                                                or data.get("created_at")
-                                            )
-                                            or st.st_mtime
-                                        )
-                                        file_entries.append(
-                                            {
-                                                "id": f"koma|{filename}|{idx}|{tot}",
-                                                "ts": ts,
-                                                "tokens": tot,
-                                                "input": in_tok,
-                                                "output": out_tok,
-                                                "cache": cache_tok,
-                                                "source": "koma",
-                                            }
-                                        )
-                            except Exception:
-                                pass
-                        self.file_cache[path] = (st.st_mtime, st.st_size, file_entries)
-                        entries.extend(file_entries)
+                    items = data if isinstance(data, list) else [data]
+                    found: list[tuple[int, int, int]] = []
+                    self._collect_usage_objects(items, found)
+                    for idx, (inp, out, cache) in enumerate(found):
+                        tot = inp + out + cache
+                        file_entries.append(
+                            {
+                                "id": f"{source}|{path}|{idx}",
+                                "ts": base_ts,
+                                "tokens": tot,
+                                "input": inp,
+                                "output": out,
+                                "cache": cache,
+                                "source": source,
+                            }
+                        )
+                    self._cache_set(path, (st.st_mtime, st.st_size, file_entries))
+                    entries.extend(file_entries)
                 except Exception:
                     pass
         return entries
 
     def get_summary(self) -> tuple[TokenUsageSummary, int]:
         """Returns current TokenUsageSummary across all AI tools and delta_tokens burned since last sweep."""
-        raw_entries = (
-            self.scan_antigravity()
-            + self.scan_claude()
-            + self.scan_cursor()
-            + self.scan_codex()
-            + self.scan_copilot()
-            + self.scan_koma()
-        )
+        enabled = self.enabled_sources
+
+        def _on(src: str) -> bool:
+            return enabled is None or src in enabled
+
+        raw_entries: list[dict] = []
+        if _on("antigravity"):
+            raw_entries += self.scan_antigravity()
+        if _on("claude"):
+            raw_entries += self.scan_claude()
+        if _on("cursor"):
+            raw_entries += self.scan_cursor()
+        if _on("codex"):
+            raw_entries += self.scan_codex()
+        if _on("copilot"):
+            raw_entries += self.scan_copilot()
+        if _on("koma"):
+            raw_entries += self.scan_koma()
+        if _on("aider"):
+            raw_entries += self.scan_aider()
+        if _on("windsurf"):
+            raw_entries += self.scan_windsurf()
+        if _on("cline") or _on("roo"):
+            cline_roo = self.scan_cline_and_roo()
+            if enabled is not None:
+                cline_roo = [e for e in cline_roo if e["source"] in enabled]
+            raw_entries += cline_roo
 
         dedup_map: dict[str, dict] = {}
         for e in raw_entries:
@@ -703,5 +1007,14 @@ class WindowsTokenReader:
         else:
             delta = 0  # First initialization
         self.last_total_tokens = total_lifetime
+
+        # Prune cache entries for deleted files; cap size to keep memory bounded
+        with self._cache_lock:
+            if len(self.file_cache) > 256:
+                missing = [p for p in self.file_cache if not os.path.exists(p)]
+                for p in missing:
+                    del self.file_cache[p]
+                while len(self.file_cache) > 512:
+                    self.file_cache.pop(next(iter(self.file_cache)))
 
         return summary, delta

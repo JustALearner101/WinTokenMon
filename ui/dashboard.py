@@ -13,13 +13,6 @@ from PIL import Image
 from core.companion_store import CompanionStore
 from core.poke_api import get_sprite_path
 from core.token_reader import TokenUsageSummary
-from ui.dashboard_theme import (
-    NATURE_DETAILS,
-    POKEMON_LORE,
-    TYPE_THEMES,
-    get_pokemon_element_type,
-)
-from ui.modals import NatureSelectorModal, PokedexInspectorModal
 from ui.tabs import (
     HomeTabView,
     PokedexTabView,
@@ -30,17 +23,6 @@ from ui.tabs import (
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
-
-# Re-exports for backward-compatibility
-__all__ = [
-    "DashboardWindow",
-    "NatureSelectorModal",
-    "PokedexInspectorModal",
-    "TYPE_THEMES",
-    "NATURE_DETAILS",
-    "POKEMON_LORE",
-    "get_pokemon_element_type",
-]
 
 
 class DashboardWindow:
@@ -161,12 +143,6 @@ class DashboardWindow:
             except Exception:
                 pass
         return None
-
-    def _get_cached_sprite(
-        self, species_id: int, is_shiny: bool = False, size: int = 56
-    ) -> ctk.CTkImage | None:
-        """Backward-compatible alias for get_cached_sprite."""
-        return self.get_cached_sprite(species_id, is_shiny, size)
 
     def show_toast(self, message: str, bg_color: str = "#2ECC71", text_color: str = "#181825"):
         """Displays an animated in-app toast notification banner."""

@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.4.0-preview] - 2026-08-22
+
+### 🚀 Highlights & Major Features
+
+#### 📡 Extended AI Provider Scanners (v0.4.0)
+- **Aider** (`core/token_reader.py`): Incremental parser for `~/.aider.chat.history.md` with `k/m`-suffix token expansion (`5.4k sent, 345 received`) and tolerant fallback regex.
+- **Windsurf (Cascade)**: Non-locking SQLite reader for `%APPDATA%\Windsurf\User\workspaceStorage\*\state.vscdb` (`mode=ro`, 1s timeout) with a 24-hour mtime pre-filter that skips stale workspaces.
+- **Cline & Roo Code**: JSON task log parsers for VS Code / Insiders globalStorage (`api_conversation_history.json`) covering input/output/cache token fields.
+- **Per-Provider Toggles**: New "Connected Local AI Tools" switch grid in Settings persists `tracked_providers` to `state.json`; the scanner engine filters sources live via `WindowsTokenReader.enabled_sources`.
+
+#### 📊 Ultra-Compact Floating HUD Pill (v0.4.0)
+- **Capsule Mode** (`ui/compact_hud.py`): 220x32px always-on-top semi-transparent pill in Catppuccin Mocha styling showing today's burn vs limit (%), live ⚡ velocity (`tokens/min`), and companion 🥚/🐾 progress.
+- **Velocity Speedometer**: Rolling 5-minute sample window computed in the poll loop (`main.py`).
+- **Draggable & Docked**: Drag anywhere; default docks above the Windows taskbar near the clock with an 8px margin; position persisted across restarts.
+- **Mode Switching**: Tray menu item toggles Full Pet ↔ Compact HUD instantly; display mode saved to `state.json` with backward-compatible defaults.
+
+---
+
 ## [0.2.0-preview] - 2026-08-19
 
 ### 🚀 Highlights & Major Features

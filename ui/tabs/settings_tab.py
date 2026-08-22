@@ -120,6 +120,36 @@ class SettingsTabView:
             self.switch_spawn_intro.deselect()
         self.switch_spawn_intro.pack(side="left")
 
+        # Auto-Evolve Switch Row
+        evolve_row = ctk.CTkFrame(pet_card, fg_color="transparent")
+        evolve_row.pack(fill="x", padx=14, pady=(0, 10))
+
+        self.switch_auto_evolve = ctk.CTkSwitch(
+            evolve_row,
+            text="⚡ Auto-Evolve Immediately on 100% Token EXP",
+            command=self.action_toggle_auto_evolve,
+        )
+        if getattr(self.store, "auto_evolve_enabled", False):
+            self.switch_auto_evolve.select()
+        else:
+            self.switch_auto_evolve.deselect()
+        self.switch_auto_evolve.pack(side="left")
+
+        # Windows Startup Switch Row
+        startup_row = ctk.CTkFrame(pet_card, fg_color="transparent")
+        startup_row.pack(fill="x", padx=14, pady=(0, 10))
+
+        self.switch_autostart = ctk.CTkSwitch(
+            startup_row,
+            text="🚀 Launch WinTokenMon on Windows Startup",
+            command=self.action_toggle_autostart,
+        )
+        if getattr(self.store, "autostart_enabled", False):
+            self.switch_autostart.select()
+        else:
+            self.switch_autostart.deselect()
+        self.switch_autostart.pack(side="left")
+
         # Audio Section
         sound_card = ctk.CTkFrame(frame, corner_radius=10)
         sound_card.pack(fill="x", padx=6, pady=(0, 10))
@@ -247,6 +277,10 @@ class SettingsTabView:
             "• Codex CLI (~/.codex/sessions/**/rollout-*.jsonl)",
             "• GitHub Copilot CLI (~/.copilot/session-store.db)",
             "• Koma (~/.koma/sessions/*, ~/.koma/ledger/*)",
+            "• Aider (~/.aider.chat.history.md)",
+            "• Windsurf / Cascade (%APPDATA%/Windsurf/.../state.vscdb)",
+            "• Cline (VS Code) (%APPDATA%/Code/User/globalStorage/saoudrizwan.claude-dev)",
+            "• Roo Code (%APPDATA%/Code/User/globalStorage/rooveterinaryinc.roo-cline)",
         ]
         ctk.CTkLabel(
             tools_card,
@@ -254,7 +288,36 @@ class SettingsTabView:
             font=ctk.CTkFont(size=10),
             text_color="gray70",
             justify="left",
-        ).pack(anchor="w", padx=14, pady=(0, 10))
+        ).pack(anchor="w", padx=14, pady=(0, 6))
+
+        # Per-provider enable/disable switches
+        self.provider_switches: dict[str, ctk.CTkSwitch] = {}
+        provider_labels = {
+            "antigravity": "Antigravity CLI",
+            "claude": "Claude Code",
+            "cursor": "Cursor IDE",
+            "codex": "Codex CLI",
+            "copilot": "GitHub Copilot",
+            "koma": "Koma",
+            "aider": "Aider",
+            "windsurf": "Windsurf (Cascade)",
+            "cline": "Cline (VS Code)",
+            "roo": "Roo Code",
+        }
+        switches_frame = ctk.CTkFrame(tools_card, fg_color="transparent")
+        switches_frame.pack(fill="x", padx=14, pady=(0, 4))
+        for col in range(2):
+            switches_frame.grid_columnconfigure(col, weight=1)
+        for i, (key, label) in enumerate(provider_labels.items()):
+            sw = ctk.CTkSwitch(
+                switches_frame,
+                text=label,
+                command=lambda k=key: self.action_toggle_provider(k),
+            )
+            if self.store.tracked_providers.get(key, True):
+                sw.select()
+            sw.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 8), pady=2)
+            self.provider_switches[key] = sw
 
         # Danger Zone
         reset_card = ctk.CTkFrame(frame, corner_radius=10)
@@ -326,6 +389,15 @@ class SettingsTabView:
         status_str = "enabled" if val else "disabled"
         self.dashboard.show_toast(f"🔊 Audio sounds {status_str}!")
 
+    def action_toggle_provider(self, key: str):
+        sw = self.provider_switches[key]
+        enabled = bool(sw.get())
+        self.store.tracked_providers[key] = enabled
+        self.store.save()
+        if self.dashboard.on_update_callback:
+            # Rebuild the scanner filter from saved toggles
+            self.dashboard.on_update_callback()
+
     def action_test_sound(self):
         if not self.store.is_egg:
             play_cry(self.store.active.species_id, volume=0.7)
@@ -380,3 +452,29 @@ class SettingsTabView:
     def action_test_notification(self):
         if self.dashboard.on_test_notification:
             self.dashboard.on_test_notification()
+
+    def action_toggle_auto_evolve(self):
+        self.store.auto_evolve_enabled = bool(self.switch_auto_evolve.get())
+        self.store.save()
+        state_str = (
+            "Enabled (Automatic)"
+            if self.store.auto_evolve_enabled
+            else "Disabled (Manual Evolve Prompt)"
+        )
+        self.dashboard.show_toast(f"⚡ Evolution Mode: {state_str}")
+        self.dashboard.refresh_home_view()
+        if self.dashboard.on_update_callback:
+            self.dashboard.on_update_callback()
+
+    def action_toggle_autostart(self):
+        enabled = bool(self.switch_autostart.get())
+        success = self.store.set_autostart(enabled)
+        if success:
+            state_str = "Enabled (Starts on login)" if enabled else "Disabled (Manual start only)"
+            self.dashboard.show_toast(f"🚀 Windows Startup: {state_str}")
+        else:
+            self.dashboard.show_toast(
+                "⚠️ Failed to update Windows Registry for startup!",
+                bg_color="#E74C3C",
+                text_color="#FFF",
+            )

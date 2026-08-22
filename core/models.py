@@ -13,23 +13,6 @@ class Rarity(str, Enum):
     RARE = "rare"
     LEGENDARY = "legendary"
 
-    @property
-    def sort_rank(self) -> int:
-        ranks = {Rarity.COMMON: 0, Rarity.UNCOMMON: 1, Rarity.RARE: 2, Rarity.LEGENDARY: 3}
-        return ranks.get(self, 0)
-
-    @classmethod
-    def from_capture_rate(
-        cls, capture_rate: int, is_legendary: bool = False, is_mythical: bool = False
-    ) -> "Rarity":
-        if is_legendary or is_mythical:
-            return cls.LEGENDARY
-        if capture_rate <= 45:
-            return cls.RARE
-        if capture_rate <= 120:
-            return cls.UNCOMMON
-        return cls.COMMON
-
 
 class PokemonNature(str, Enum):
     HARDY = "Hardy"
@@ -173,17 +156,6 @@ class ActivePokemon:
     daily_pet_count: int = 0
     treats_eaten_today: int = 0
     last_treat_date: str = ""
-
-
-@dataclass
-class CaughtPokemon:
-    species_id: int
-    species_name: str
-    rarity: Rarity
-    nature: PokemonNature
-    is_shiny: bool
-    caught_at: float
-    total_tokens_spent: int
 
 
 class BadgeTier(str, Enum):

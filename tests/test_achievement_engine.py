@@ -66,20 +66,16 @@ class TestAchievementEngine:
 
     def test_egg_hoarder_requires_all_paid_tiers(self, tmp_path, monkeypatch):
         store = self._create_isolated_store(tmp_path, monkeypatch)
-        engine = AchievementEngine(store)
 
         store.spendable_tokens = 1_000_000_000
 
         store.buy_egg(EggTier.UNCOMMON)
-        engine.on_game_event("BUY_EGG")
         assert "egg_hoarder" not in store.unlocked_achievements
 
         store.buy_egg(EggTier.RARE)
-        engine.on_game_event("BUY_EGG")
         assert "egg_hoarder" not in store.unlocked_achievements
 
         store.buy_egg(EggTier.LEGENDARY)
-        engine.on_game_event("BUY_EGG")
         assert "egg_hoarder" in store.unlocked_achievements
         # Reward: 50M tokens
         assert "egg_hoarder" in store.unlocked_achievements

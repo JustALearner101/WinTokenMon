@@ -5,6 +5,7 @@ PokéAPI client and offline cache for WinTokenMon
 import os
 import shutil
 import sys
+import threading
 import urllib.error
 import urllib.request
 
@@ -342,8 +343,61 @@ POKEMON_TYPES = {
 }
 
 
+# Background sprite downloads: never block the UI thread
+_download_inflight: set[tuple[int, bool]] = set()
+_download_lock = threading.Lock()
+
+
+def _download_sprite(species_id: int, is_shiny: bool):
+    """Downloads GIF (fallback PNG) sprite into the local cache. Runs on a worker thread."""
+    suffix = "_shiny" if is_shiny else ""
+    local_gif = os.path.join(SPRITES_DIR, f"{species_id}{suffix}.gif")
+    local_png = os.path.join(SPRITES_DIR, f"{species_id}{suffix}.png")
+    base = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon"
+    gif_url = (
+        f"{base}/other/showdown/shiny/{species_id}.gif"
+        if is_shiny
+        else f"{base}/other/showdown/{species_id}.gif"
+    )
+    png_url = (
+        f"{base}/shiny/{species_id}.png" if is_shiny else f"{base}/{species_id}.png"
+    )
+    headers = {"User-Agent": "WinTokenMon/1.0"}
+    for url, target in ((gif_url, local_gif), (png_url, local_png)):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as response, open(target, "wb") as out_file:
+                out_file.write(response.read())
+            return
+        except Exception:
+            continue
+
+
+def _schedule_sprite_download(species_id: int, is_shiny: bool):
+    """Starts a background sprite download once per (species, shiny) until it succeeds."""
+    key = (species_id, is_shiny)
+    with _download_lock:
+        if key in _download_inflight:
+            return
+        _download_inflight.add(key)
+
+    def _run():
+        try:
+            _download_sprite(species_id, is_shiny)
+        finally:
+            with _download_lock:
+                _download_inflight.discard(key)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def get_sprite_path(species_id: int, is_shiny: bool = False) -> str:
-    """Returns local path to animated GIF or PNG sprite, resolving from cache, bundle, or downloading."""
+    """Returns local path to animated GIF or PNG sprite, resolving from cache or bundle.
+
+    If the sprite is not available locally, a background download is scheduled and
+    an empty string is returned immediately — callers show a placeholder and retry
+    on their next refresh once the file lands in the cache.
+    """
     shiny_suffix = "_shiny" if is_shiny else ""
     local_gif = os.path.join(SPRITES_DIR, f"{species_id}{shiny_suffix}.gif")
     local_png = os.path.join(SPRITES_DIR, f"{species_id}{shiny_suffix}.png")
@@ -372,34 +426,6 @@ def get_sprite_path(species_id: int, is_shiny: bool = False) -> str:
         except Exception:
             return bundled_png
 
-    # 3. Fallback: Try downloading Showdown animated GIF from network
-    gif_url = (
-        f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/shiny/{species_id}.gif"
-        if is_shiny
-        else f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{species_id}.gif"
-    )
-    png_url = (
-        f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/{species_id}.png"
-        if is_shiny
-        else f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
-    )
-
-    headers = {"User-Agent": "WinTokenMon/1.0"}
-    try:
-        req = urllib.request.Request(gif_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as response, open(local_gif, "wb") as out_file:
-            out_file.write(response.read())
-        return local_gif
-    except Exception:
-        pass
-
-    # 4. Fallback: Download PNG sprite
-    try:
-        req = urllib.request.Request(png_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as response, open(local_png, "wb") as out_file:
-            out_file.write(response.read())
-        return local_png
-    except Exception:
-        pass
-
+    # 3. Not available locally: download in the background without blocking.
+    _schedule_sprite_download(species_id, is_shiny)
     return ""

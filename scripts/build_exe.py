@@ -82,13 +82,9 @@ def build():
         "--hidden-import",
         "pygame",
         "--hidden-import",
-        "darkdetect",
-        "--hidden-import",
         "sqlite3",
         "--hidden-import",
         "wave",
-        "--hidden-import",
-        "dotenv",
         "--clean",
         MAIN_PY,
     ]

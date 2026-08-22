@@ -68,21 +68,6 @@ class AchievementEngine:
 
         return unlocked
 
-    def on_game_event(
-        self, event_type: str, context: dict[str, Any] | None = None
-    ) -> list[AchievementDef]:
-        """
-        Evaluates game events (e.g. egg purchase) for achievements.
-        """
-        unlocked: list[AchievementDef] = []
-        if event_type == "BUY_EGG":
-            if "egg_hoarder" not in self.store.unlocked_achievements:
-                paid_tiers = {"uncommon", "rare", "legendary"}
-                if paid_tiers.issubset(set(self.store.purchased_egg_tiers)):
-                    if self.store.unlock_achievement("egg_hoarder"):
-                        unlocked.append(ACHIEVEMENT_DEFINITIONS["egg_hoarder"])
-        return unlocked
-
     def _handle_hatch_event(self, active_pokemon):
         """Callback handler when an egg hatches."""
         # First Hatch
