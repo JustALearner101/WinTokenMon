@@ -83,6 +83,13 @@
 - Windows 10 or Windows 11 (64-bit)
 - Python 3.10, 3.11, 3.12, or 3.14+
 
+> ### 🛡️ Windows SmartScreen Notice
+> When first running the installer or the portable `.exe`, Windows may show
+> **"Windows protected your PC"**. This is standard for unsigned apps from new
+> publishers — the binaries are reproducible from this open-source repo and their
+> SHA256 checksums are published on every [release](https://github.com/JustALearner101/WinTokenMon/releases).
+> To proceed, click **`More info` → `Run anyway`**.
+
 ### Installation & Launch
 
 1. **Clone the repository**:
