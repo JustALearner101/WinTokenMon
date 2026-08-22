@@ -1,18 +1,21 @@
 ; =====================================================================
 ; Inno Setup 6 Script for WinTokenMon for Windows
-; Compiles: WinTokenMon-Setup-v0.2.0-preview.exe
+; Version is injected by scripts/build_installer.py via /DMyAppVersion;
+; the default below is only a fallback for manual ISCC runs.
 ; =====================================================================
 
 #define MyAppName "WinTokenMon"
-#define MyAppVersion "0.2.0-preview"
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "WinTokenMon Contributors"
 #define MyAppURL "https://github.com/JustALearner101/WinTokenMon"
-#define MyAppExeName "WinTokenMon-v0.2.0-preview-Portable.exe"
+#define MyAppExeName "WinTokenMon-v" + MyAppVersion + "-Portable.exe"
 
 [Setup]
 ; Unique Application ID
 AppId={{E5B239C8-8271-4A59-B87A-28FE1C2956D3}
-AppName={#MyAppName} (Preview)
+AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} v{#MyAppVersion}
 AppPublisher={#MyAppPublisher}

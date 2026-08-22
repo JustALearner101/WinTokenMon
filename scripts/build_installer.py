@@ -66,6 +66,12 @@ def main():
         print(f"❌ Error: {INSTALLER_ISS} not found!")
         sys.exit(1)
 
+    # Guard against packaging a stale executable from an older build
+    expected_exe = os.path.join(DIST_DIR, f"WinTokenMon-v{__version__}-Portable.exe")
+    if not os.path.exists(expected_exe):
+        print(f"❌ Error: {expected_exe} not found — refusing to package a stale binary.")
+        sys.exit(1)
+
     iscc_bin = find_iscc()
     if not iscc_bin:
         print(" Inno Setup Compiler (ISCC.exe) was not detected on this machine.")
@@ -82,7 +88,9 @@ def main():
     print(f"[*] Found Inno Setup Compiler: {iscc_bin}")
     print(f"[*] Compiling script: {INSTALLER_ISS}")
 
-    cmd = [iscc_bin, INSTALLER_ISS]
+    # Inject the live version from core.__version__ so the Setup wizard can
+    # never package a stale, hardcoded version of the portable executable.
+    cmd = [iscc_bin, f"/DMyAppVersion={__version__}", INSTALLER_ISS]
     res = subprocess.run(cmd, cwd=ROOT_DIR)
 
     if res.returncode == 0:
